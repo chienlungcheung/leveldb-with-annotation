@@ -151,9 +151,9 @@ DBImpl::DBImpl(const Options& raw_options, const std::string& dbname)
 DBImpl::~DBImpl() {
   // Wait for background work to finish
   mutex_.Lock();
-  shutting_down_.Release_Store(this);  // Any non-null value is ok
-  while (background_compaction_scheduled_) {
-    background_work_finished_signal_.Wait();
+  shutting_down_.Release_Store(this);  // Any non-null value is ok 随便存个非空值即可，标记正在关闭
+  while (background_compaction_scheduled_) { // 循环是为了防止虚假唤醒误判
+    background_work_finished_signal_.Wait(); // 等待后台工作结束
   }
   mutex_.Unlock();
 
@@ -490,13 +490,17 @@ Status DBImpl::RecoverLogFile(uint64_t log_number, bool last_log,
   return status;
 }
 
+// 将 mem 对应的 memtable 以 table 文件形式保存到最新 version 的 level-0
 Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
                                 Version* base) {
   mutex_.AssertHeld();
   const uint64_t start_micros = env_->NowMicros();
   FileMetaData meta;
+  // 为 memtable 对应的 table 文件生成一个文件号
   meta.number = versions_->NewFileNumber();
+  // 保护 number 对应的 table 文件，避免在压实过程中被删除
   pending_outputs_.insert(meta.number);
+  // 获取 memtable 对应的迭代器
   Iterator* iter = mem->NewIterator();
   Log(options_.info_log, "Level-0 table #%llu: started",
       (unsigned long long) meta.number);
@@ -518,6 +522,7 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
 
   // Note that if file_size is zero, the file has been deleted and
   // should not be added to the manifest.
+  // 如果 file_size 等于 0，则对应文件已经被删除了而且不应该加入到 manifest 中。
   int level = 0;
   if (s.ok() && meta.file_size > 0) {
     const Slice min_user_key = meta.smallest.user_key();
@@ -541,9 +546,13 @@ void DBImpl::CompactMemTable() {
   assert(imm_ != nullptr);
 
   // Save the contents of the memtable as a new Table
+  // 将内存中的 memtable 内容保存为 table 文件
   VersionEdit edit;
+  // 返回当前 dbimpl 对应的最新 version
   Version* base = versions_->current();
+  // 将该 version 活跃引用计数加一
   base->Ref();
+  // 将 imm_ 对应的 memtable 以 table 文件形式保存到最新 version 的 level-0
   Status s = WriteLevel0Table(imm_, &edit, base);
   base->Unref();
 
@@ -1192,6 +1201,7 @@ void DBImpl::ReleaseSnapshot(const Snapshot* snapshot) {
 }
 
 // Convenience methods
+// 直接调用了基类的 Put 方法
 Status DBImpl::Put(const WriteOptions& o, const Slice& key, const Slice& val) {
   return DB::Put(o, key, val);
 }
@@ -1207,13 +1217,15 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
   w.done = false;
 
   MutexLock l(&mutex_);
-  writers_.push_back(&w);
-  while (!w.done && &w != writers_.front()) {
+  writers_.push_back(&w); // 注意，指针是内置类型，当做为右值类型时支持 move 语义，所以这里调用的就是 deque 的右值引用版本的 push_back
+  while (!w.done && &w != writers_.front()) { // 当前 writer 工作没完成并且当前队列首元素不是该 writer
     w.cv.Wait();
   }
-  if (w.done) {
+  if (w.done) { // 当前 writer 工作已经完成了
     return w.status;
   }
+
+  // 到这只有一个原因，那就是 w 没有完成工作，且 w 是 writer 队列的首元素
 
   // May temporarily unlock and wait.
   Status status = MakeRoomForWrite(my_batch == nullptr);
@@ -1325,9 +1337,13 @@ WriteBatch* DBImpl::BuildBatchGroup(Writer** last_writer) {
 
 // REQUIRES: mutex_ is held
 // REQUIRES: this thread is currently at the front of the writer queue
+//
+// 调用该方法前提：
+// - mutex_ 被当前线程持有
+// - 当前线程当前在 writer 队列的队首
 Status DBImpl::MakeRoomForWrite(bool force) {
-  mutex_.AssertHeld();
-  assert(!writers_.empty());
+  mutex_.AssertHeld(); // 断言当前线程持有 mutex_
+  assert(!writers_.empty()); // 断言 writer 队列不为空
   bool allow_delay = !force;
   Status s;
   while (true) {
@@ -1483,6 +1499,8 @@ void DBImpl::GetApproximateSizes(
 
 // Default implementations of convenience methods that subclasses of DB
 // can call if they wish
+//
+// DB 的默认 Put 实现，派生类可以直接使用。
 Status DB::Put(const WriteOptions& opt, const Slice& key, const Slice& value) {
   WriteBatch batch;
   batch.Put(key, value);

@@ -10,6 +10,15 @@
 // non-const method, all threads accessing the same Status must use
 // external synchronization.
 
+/**
+ * Status 类封装了 leveldb 每个操作返回的状态。
+ *
+ * 每个 Status 实例都是只读的，因为底层存储用的是指向常量字符数组的指针。
+ *
+ * 除了 const 方法，其它方法都是非线程安全的，使用时需要加锁。
+ *
+ * 状态数据存储在字符数组中，编码格式为：状态信息长度（4字节）+状态码（1字节）+状态信息
+ */
 #ifndef STORAGE_LEVELDB_INCLUDE_STATUS_H_
 #define STORAGE_LEVELDB_INCLUDE_STATUS_H_
 

@@ -15,6 +15,7 @@ namespace leveldb {
 Status WriteStringToFileSync(Env* env, const Slice& data,
                              const std::string& fname);
 
+// 将指定的 dbname、number 和后缀拼接生成一个字符串形式的文件名
 static std::string MakeFileName(const std::string& dbname, uint64_t number,
                                 const char* suffix) {
   char buf[100];

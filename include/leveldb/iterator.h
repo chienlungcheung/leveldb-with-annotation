@@ -78,11 +78,14 @@ class LEVELDB_EXPORT Iterator {
   // Note that unlike all of the preceding methods, this method is
   // not abstract and therefore clients should not override it.
   using CleanupFunction = void (*)(void* arg1, void* arg2);
+  // 我们允许客户端注册 CleanupFunction 类型的回调函数，在迭代器被销毁的时候会调用它们（可以注册多个）。
+  // 注意，跟前面的方法不同，RegisterCleanup 不是抽象的，客户端不应该覆写他们。
   void RegisterCleanup(CleanupFunction function, void* arg1, void* arg2);
 
  private:
   // Cleanup functions are stored in a single-linked list.
   // The list's head node is inlined in the iterator.
+  // 该类用于保存用户注册的清理函数，一个清理函数对应一个该类对象，全部对象被维护在一个单向链表上。
   struct CleanupNode {
     // The head node is used if the function pointer is not null.
     CleanupFunction function;

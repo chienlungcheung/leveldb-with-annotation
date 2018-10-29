@@ -14,9 +14,12 @@ namespace crc32c {
 // Return the crc32c of concat(A, data[0,n-1]) where init_crc is the
 // crc32c of some string A.  Extend() is often used to maintain the
 // crc32c of a stream of data.
+//
+// 将一个计算好的 init_crc 与 data[0,n-1] 级联计算整体的 crc
 uint32_t Extend(uint32_t init_crc, const char* data, size_t n);
 
 // Return the crc32c of data[0,n-1]
+// 计算 data[0, n-1] 的 crc32c
 inline uint32_t Value(const char* data, size_t n) {
   return Extend(0, data, n);
 }
@@ -28,12 +31,14 @@ static const uint32_t kMaskDelta = 0xa282ead8ul;
 // Motivation: it is problematic to compute the CRC of a string that
 // contains embedded CRCs.  Therefore we recommend that CRCs stored
 // somewhere (e.g., in files) should be masked before being stored.
+// 由于计算一个包含了 CRCs 的字符串的 CRC 可能会出问题，所以我们建议存储 CRC 之前先将其掩码。
 inline uint32_t Mask(uint32_t crc) {
   // Rotate right by 15 bits and add a constant.
   return ((crc >> 15) | (crc << 17)) + kMaskDelta;
 }
 
 // Return the crc whose masked representation is masked_crc.
+// 将掩码过的 crc 解除掩码
 inline uint32_t Unmask(uint32_t masked_crc) {
   uint32_t rot = masked_crc - kMaskDelta;
   return ((rot >> 17) | (rot << 15));

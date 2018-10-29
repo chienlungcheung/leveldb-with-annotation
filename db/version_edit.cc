@@ -11,6 +11,9 @@ namespace leveldb {
 
 // Tag numbers for serialized VersionEdit.  These numbers are written to
 // disk and should not be changed.
+//
+// 用于序列化 VersionEdit 的 tag number。
+// 这些数字会被写入磁盘，所以不要修改他们，否则反序列化就对不上了。
 enum Tag {
   kComparator           = 1,
   kLogNumber            = 2,
@@ -38,6 +41,7 @@ void VersionEdit::Clear() {
   new_files_.clear();
 }
 
+// 将该 VersionEdit 对象序列化到 dst 指定内存中
 void VersionEdit::EncodeTo(std::string* dst) const {
   if (has_comparator_) {
     PutVarint32(dst, kComparator);
@@ -85,6 +89,7 @@ void VersionEdit::EncodeTo(std::string* dst) const {
   }
 }
 
+// 在 GetLengthPrefixedSlice 基础上加了个 InternalKey 的 decode
 static bool GetInternalKey(Slice* input, InternalKey* dst) {
   Slice str;
   if (GetLengthPrefixedSlice(input, &str)) {
@@ -95,6 +100,7 @@ static bool GetInternalKey(Slice* input, InternalKey* dst) {
   }
 }
 
+// 在 GetVarint32 基础上加了个判断，防止 level 超出范围
 static bool GetLevel(Slice* input, int* level) {
   uint32_t v;
   if (GetVarint32(input, &v) &&
@@ -106,6 +112,7 @@ static bool GetLevel(Slice* input, int* level) {
   }
 }
 
+// 将 src 保存的数据反序列化到当前 VersionEdit 对象中
 Status VersionEdit::DecodeFrom(const Slice& src) {
   Clear();
   Slice input = src;
@@ -126,7 +133,7 @@ Status VersionEdit::DecodeFrom(const Slice& src) {
           comparator_ = str.ToString();
           has_comparator_ = true;
         } else {
-          msg = "comparator name";
+          msg = "comparator name"; // 表示解析 comparator name 失败
         }
         break;
 
@@ -209,6 +216,7 @@ Status VersionEdit::DecodeFrom(const Slice& src) {
   return result;
 }
 
+// 将 VersionEdit 对象以人类友好的方式打印出来
 std::string VersionEdit::DebugString() const {
   std::string r;
   r.append("VersionEdit {");

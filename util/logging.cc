@@ -23,11 +23,11 @@ void AppendNumberTo(std::string* str, uint64_t num) {
 void AppendEscapedStringTo(std::string* str, const Slice& value) {
   for (size_t i = 0; i < value.size(); i++) {
     char c = value[i];
-    if (c >= ' ' && c <= '~') {
+    if (c >= ' ' && c <= '~') { // 从空格到破折号都为可打印字符，其它为非可打印字符
       str->push_back(c);
     } else {
       char buf[10];
-      snprintf(buf, sizeof(buf), "\\x%02x",
+      snprintf(buf, sizeof(buf), "\\x%02x", // 输出形式为 xab 这种，长度不足 2 前面补 0
                static_cast<unsigned int>(c) & 0xff);
       str->append(buf);
     }
@@ -50,7 +50,7 @@ bool ConsumeDecimalNumber(Slice* in, uint64_t* val) {
   // Constants that will be optimized away.
   constexpr const uint64_t kMaxUint64 = std::numeric_limits<uint64_t>::max();
   constexpr const char kLastDigitOfMaxUint64 =
-      '0' + static_cast<char>(kMaxUint64 % 10);
+      '0' + static_cast<char>(kMaxUint64 % 10); // 将 kMaxUint64 个位上的数转换为字符形式
 
   uint64_t value = 0;
 
@@ -63,10 +63,11 @@ bool ConsumeDecimalNumber(Slice* in, uint64_t* val) {
   for (; current != end; ++current) {
     const unsigned char ch = *current;
     if (ch < '0' || ch > '9')
-      break;
+      break; // 到达非数字部分
 
     // Overflow check.
     // kMaxUint64 / 10 is also constant and will be optimized away.
+    // 避免溢出
     if (value > kMaxUint64 / 10 ||
         (value == kMaxUint64 / 10 && ch > kLastDigitOfMaxUint64)) {
       return false;

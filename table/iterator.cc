@@ -14,6 +14,7 @@ Iterator::Iterator() {
 Iterator::~Iterator() {
   if (!cleanup_head_.IsEmpty()) {
     cleanup_head_.Run();
+    // 线性的，太多了应该会影响性能，但总要做释放操作，时间总归省不了
     for (CleanupNode* node = cleanup_head_.next; node != nullptr; ) {
       node->Run();
       CleanupNode* next_node = node->next;
@@ -23,6 +24,7 @@ Iterator::~Iterator() {
   }
 }
 
+// 将用户定制的清理函数挂到单向链表上，待迭代器销毁时挨个调用（见 ~Iterator()）。
 void Iterator::RegisterCleanup(CleanupFunction func, void* arg1, void* arg2) {
   assert(func != nullptr);
   CleanupNode* node;

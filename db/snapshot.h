@@ -14,8 +14,11 @@ class SnapshotList;
 
 // Snapshots are kept in a doubly-linked list in the DB.
 // Each SnapshotImpl corresponds to a particular sequence number.
+//
+// Snapshots 保存在 DB 的一个双向循环链表中，每个 SnapshotImpl 对应一个具体的序列号。
 class SnapshotImpl : public Snapshot {
  public:
+  // 构造函数允许一个序列号隐式地转换为一个 SnapshotImpl 对象
   SnapshotImpl(SequenceNumber sequence_number)
       : sequence_number_(sequence_number) {}
 
@@ -48,8 +51,10 @@ class SnapshotList {
   SnapshotImpl* newest() const { assert(!empty()); return head_.prev_; }
 
   // Creates a SnapshotImpl and appends it to the end of the list.
+  //
+  // 创建一个指定版本号的快照，并将其挂到双向循环链表上
   SnapshotImpl* New(SequenceNumber sequence_number) {
-    assert(empty() || newest()->sequence_number_ <= sequence_number);
+    assert(empty() || newest()->sequence_number_ <= sequence_number); // 最新版本的快照，版本号必须最大
 
     SnapshotImpl* snapshot = new SnapshotImpl(sequence_number);
 
@@ -70,6 +75,12 @@ class SnapshotList {
   // The snapshot pointer should not be const, because its memory is
   // deallocated. However, that would force us to change DB::ReleaseSnapshot(),
   // which is in the API, and currently takes a const Snapshot.
+  //
+  // 从双向链表上移除指定的快照。
+  //
+  // 要移除的快照必须是通过 New() 方法创建的。
+  //
+  // 指向快照的指针不应该是 const 的，因为它指向的内存会被释放掉。
   void Delete(const SnapshotImpl* snapshot) {
 #if !defined(NDEBUG)
     assert(snapshot->list_ == this);

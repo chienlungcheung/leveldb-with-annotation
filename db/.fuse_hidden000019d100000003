@@ -11,11 +11,7 @@
 //
 // Version,VersionSet are thread-compatible, but require external
 // synchronization on all accesses.
-//
-// 一个 DBImpl 的表示由一组 Versions 构成。
-// 最新的 version 叫做 "current"。较老的 versions 可能也会被保留以为活跃的迭代器提供一致性视图。
-// 每个 Version 跟踪每一个 level 的一组 Table 文件。全部 versions 集合由 VersionSet 维护。
-// Version，VersionSet 都是兼容线程的，但是在访问的时候需要外部的同步设施。
+
 #ifndef STORAGE_LEVELDB_DB_VERSION_SET_H_
 #define STORAGE_LEVELDB_DB_VERSION_SET_H_
 
@@ -57,7 +53,6 @@ int FindFile(const InternalKeyComparator& icmp,
 // largest==nullptr represents a key largest than all keys in the DB.
 // REQUIRES: If disjoint_sorted_files, files[] contains disjoint ranges
 //           in sorted order.
-// 检查 files 中是否存在文件与区间 [*smallest,*largest] 重叠。
 // 当且仅当 files 中某个文件与参数 [*smallest,*largest] 指定的 user key 区间重叠返回 true。
 // smallest==nullptr 表示小于 DB 中全部 keys 的 key。
 // largest==nullptr 表示大于 DB 中全部 keys 的 key。
@@ -68,7 +63,6 @@ bool SomeFileOverlapsRange(const InternalKeyComparator& icmp,
                            const Slice* smallest_user_key,
                            const Slice* largest_user_key);
 
-// 一个 DBImpl 的表示由一组 Versions 构成
 class Version {
  public:
   // Append to *iters a sequence of iterators that will
@@ -82,7 +76,6 @@ class Version {
   // Lookup the value for key.  If found, store it in *val and
   // return OK.  Else return a non-OK status.  Fills *stats.
   // REQUIRES: lock is not held
-  // 该结构体服务于下面的 Get 方法。
   struct GetStats {
     FileMetaData* seek_file;
     int seek_file_level;
@@ -98,8 +91,7 @@ class Version {
   // Adds "stats" into the current state.  Returns true if a new
   // compaction may need to be triggered, false otherwise.
   // REQUIRES: lock is held
-  // 与压实有关。todo 为啥这么干不清楚，看用法是调用完了 Get 后调用 UpdateStats.
-  // 将 stats 增加到当前状态中。如果需要触发一个压实，则返回 true；否则返回 false。
+  // 将 stats 增加到当前状态中。如果需要触发一个压缩，则返回 true；否则返回 false。
   // 前提：调用该方法前必须已经持有锁。
   bool UpdateStats(const GetStats& stats);
 
@@ -117,7 +109,7 @@ class Version {
 
   // Reference count management (so Versions do not disappear out from
   // under live iterators)
-  // version 的引用计数管理
+  // 引用计数管理
   void Ref();
   void Unref();
 
@@ -131,9 +123,8 @@ class Version {
   // some part of [*smallest_user_key,*largest_user_key].
   // smallest_user_key==nullptr represents a key smaller than all the DB's keys.
   // largest_user_key==nullptr represents a key largest than all the DB's keys.
-  // 检查指定的 level 是否与 [*smallest, *largest] 区间相交。
-  // 当且仅当指定 level 的某个文件与 [*smallest, *largest] 指定的 user key 区间重叠返回 true；
-  // 意思是 [*smallest, *largest] 与指定的 level 有重叠。
+  //
+  // 当且仅当指定 level 的某个文件与 [*smallest, *largest] 指定的 user key 区间重叠返回 true。
   // smallest==nullptr 表示小于 DB 中全部 keys 的 key。
   // largest==nullptr 表示大于 DB 中全部 keys 的 key。
   bool OverlapInLevel(int level,
@@ -143,8 +134,7 @@ class Version {
   // Return the level at which we should place a new memtable compaction
   // result that covers the range [smallest_user_key,largest_user_key].
   //
-  // 依据与区间 [smallest_user_key,largest_user_key] 的重叠情况获取要进行压实的 level。
-  // todo 需要确认该方法怎么使用的，以及参数具体是什么
+  // 返回需要进行压实的 level。todo 需要确认该方法怎么使用的，以及参数具体是什么
   int PickLevelForMemTableOutput(const Slice& smallest_user_key,
                                  const Slice& largest_user_key);
 
@@ -185,7 +175,7 @@ class Version {
   int refs_;                    // Number of live refs to this version
 
   // List of files per level
-  // 每个 Version 都保存着 db 每个 level 的文件元数据链表
+  // 保存每个 level 的文件元数据链表
   std::vector<FileMetaData*> files_[config::kNumLevels];
 
   // Next file to compact based on seek stats.
@@ -241,6 +231,11 @@ class VersionSet {
   // 从持久化存储恢复上一个保存的描述符
   Status Recover(bool *save_manifest);
 
+  // Return the current version.
+  //
+  // 返回当前 version
+  Version* current() const { return current_; }
+
   // Return the current manifest file number
   //
   // 返回当前使用的 MANIFEST 文件 number
@@ -271,11 +266,6 @@ class VersionSet {
   //
   // 返回指定 level 全部文件的总大小
   int64_t NumLevelBytes(int level) const;
-
-    // Return the current version.
-    //
-    // 返回最新的 version
-    Version* current() const { return current_; }
 
   // Return the last sequence number.
   //
@@ -525,10 +515,6 @@ class Compaction {
   // is that we are positioned at one of the file ranges for each
   // higher level than the ones involved in this compaction (i.e. for
   // all L >= level_ + 2).
-  //
-  // 用于实现 IsBaseLevelForKey 方法。
-  // level_ptrs_ 持有 input_version_->levels_ 的索引：
-  // 我们被定位到其中一个文件范围内，对于没一个比当前中那个在进行压实的 level。
   size_t level_ptrs_[config::kNumLevels];
 };
 

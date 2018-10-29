@@ -32,11 +32,6 @@ enum FileType {
 // "dbname".
 std::string LogFileName(const std::string& dbname, uint64_t number);
 
-// Return the name of the sstable with the specified number
-// in the db named by "dbname".  The result will be prefixed with
-// "dbname".
-std::string TableFileName(const std::string& dbname, uint64_t number);
-
 // Return the legacy file name for an sstable with the specified number
 // in the db named by "dbname". The result will be prefixed with
 // "dbname".
@@ -51,6 +46,13 @@ std::string DescriptorFileName(const std::string& dbname, uint64_t number);
 // of the current manifest file.  The result will be prefixed with
 // "dbname".
 std::string CurrentFileName(const std::string& dbname);
+
+// Return the name of the sstable with the specified number
+// in the db named by "dbname".  The result will be prefixed with
+// "dbname".
+// 基于 dbname 标识的数据库中具体的号码返回一个 sstable 的名字。返回的结果
+// 将会以 dbname 为前缀。
+    std::string TableFileName(const std::string& dbname, uint64_t number);
 
 // Return the name of the lock file for the db named by
 // "dbname".  The result will be prefixed with "dbname".

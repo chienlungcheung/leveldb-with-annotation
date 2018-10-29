@@ -46,33 +46,44 @@ static const bool kLittleEndian = !LEVELDB_IS_BIG_ENDIAN;
 class CondVar;
 
 // Thinly wraps std::mutex.
+/**
+ * 该类为对标准库 std::mutex 的一个简单的封装
+ */
 class LOCKABLE Mutex {
  public:
   Mutex() = default;
   ~Mutex() = default;
 
-  Mutex(const Mutex&) = delete;
-  Mutex& operator=(const Mutex&) = delete;
+  Mutex(const Mutex&) = delete; // 锁不允许拷贝
+  Mutex& operator=(const Mutex&) = delete; // 也不允许赋值
 
   void Lock() EXCLUSIVE_LOCK_FUNCTION() { mu_.lock(); }
   void Unlock() UNLOCK_FUNCTION() { mu_.unlock(); }
   void AssertHeld() ASSERT_EXCLUSIVE_LOCK() { }
 
  private:
-  friend class CondVar;
-  std::mutex mu_;
+  friend class CondVar; // 条件变量
+  std::mutex mu_; // 真正干活的
 };
 
 // Thinly wraps std::condition_variable.
+/**
+ * 该类为对标准库 std::condition_variable 的简单封装。
+ */
 class CondVar {
  public:
+  /**
+   * 避免 Mutex 被隐式转换为 CondVar
+   * @param mu
+   */
   explicit CondVar(Mutex* mu) : mu_(mu) { assert(mu != nullptr); }
   ~CondVar() = default;
 
-  CondVar(const CondVar&) = delete;
-  CondVar& operator=(const CondVar&) = delete;
+  CondVar(const CondVar&) = delete; // 条件变量不能拷贝
+  CondVar& operator=(const CondVar&) = delete; // 也不能赋值
 
   void Wait() {
+    // unique_lock 控制锁在某个区域的所有权，而且具备移动语义，具体见 release 方法
     std::unique_lock<std::mutex> lock(mu_->mu_, std::adopt_lock);
     cv_.wait(lock);
     lock.release();
@@ -80,8 +91,8 @@ class CondVar {
   void Signal() { cv_.notify_one(); }
   void SignalAll() { cv_.notify_all(); }
  private:
-  std::condition_variable cv_;
-  Mutex* const mu_;
+  std::condition_variable cv_; // 真正干活的
+  Mutex* const mu_; // 与自己搭伙的
 };
 
 inline bool Snappy_Compress(const char* input, size_t length,

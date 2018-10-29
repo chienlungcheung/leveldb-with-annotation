@@ -15,6 +15,10 @@ class Env;
 // all non-file-storage tasks to base_env. The caller must delete the result
 // when it is no longer needed.
 // *base_env must remain live while the result is in use.
+//
+// 返回一个新的上下文，它将全部数据存储到内存并且将全部非文件存储任务代理给 base_env。
+// 调用者不再使用该上下文的时候必须要删除它。
+// *base_env 在该上下文生命期内必须有效。
 LEVELDB_EXPORT Env* NewMemEnv(Env* base_env);
 
 }  // namespace leveldb

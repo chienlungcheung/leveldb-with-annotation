@@ -7,11 +7,15 @@ The leveldb library provides a persistent key value store. Keys and values are
 arbitrary byte arrays.  The keys are ordered within the key value store
 according to a user-specified comparator function.
 
+leveldb 提供了一个持久性的 key/value 存储。keys 和 values 都是随机字节数组，并且根据用户指定的 coparator function 对 keys 进行排序。
+
 ## Opening A Database
 
 A leveldb database has a name which corresponds to a file system directory. All
 of the contents of database are stored in this directory. The following example
 shows how to open a database, creating it if necessary:
+
+leveldb 数据库都有一个名字，该名字对应了文件系统上一个目录，而且该数据库内容全都存在该目录下。下面的例子显示了如何打开一个数据库以及在必要情况下创建之。
 
 ```c++
 #include <cassert>
@@ -28,6 +32,8 @@ assert(status.ok());
 If you want to raise an error if the database already exists, add the following
 line before the `leveldb::DB::Open` call:
 
+如果你想在数据库已存在的时候引发一个异常，将下面这行加到 `leveldb::DB::Open` 调用之前：
+
 ```c++
 options.error_if_exists = true;
 ```
@@ -38,6 +44,8 @@ You may have noticed the `leveldb::Status` type above. Values of this type are
 returned by most functions in leveldb that may encounter an error. You can check
 if such a result is ok, and also print an associated error message:
 
+你可能注意到上面的 `leveldb::Status` 类型了。该类型的值会被 leveldb 中大部分函数在遭遇错误的时候返回。你可以检查它释放为 ok，然后打印关联的错误信息即可：
+
 ```c++
 leveldb::Status s = ...;
 if (!s.ok()) cerr << s.ToString() << endl;
@@ -46,6 +54,8 @@ if (!s.ok()) cerr << s.ToString() << endl;
 ## Closing A Database
 
 When you are done with a database, just delete the database object. Example:
+
+当数据库不再使用的时候，像下面这样直接删除数据库对象就可以了：
 
 ```c++
 ... open the db as described above ...
@@ -57,6 +67,8 @@ delete db;
 
 The database provides Put, Delete, and Get methods to modify/query the database.
 For example, the following code moves the value stored under key1 to key2.
+
+数据库提供了 Put、Delete 以及 Get 方法来修改、查询数据库。下面的代码展示了将 key1 对应的 value 移动（先拷贝后删除）到 key2 下。
 
 ```c++
 std::string value;
@@ -70,6 +82,8 @@ if (s.ok()) s = db->Delete(leveldb::WriteOptions(), key1);
 Note that if the process dies after the Put of key2 but before the delete of
 key1, the same value may be left stored under multiple keys. Such problems can
 be avoided by using the `WriteBatch` class to atomically apply a set of updates:
+
+注意，上一小节中如果进程在 Put 了 key2 之后但是删除 key1 之前挂了，那么同样的 value 就出现在了多个 keys 之下。该问题可以通过使用 `WriteBatch` 类原子地应用一组操作来避免。
 
 ```c++
 #include "leveldb/write_batch.h"
@@ -92,6 +106,10 @@ the value entirely.
 Apart from its atomicity benefits, `WriteBatch` may also be used to speed up
 bulk updates by placing lots of individual mutations into the same batch.
 
+`WriteBatch` 保存着一系列将被应用到数据库的编辑操作，这些操作会按照添加的顺序依次被执行。注意，我们先执行 Delete 后执行 Put，这样如果 key1 和 key2 一样的情况下我们也不会错误地丢失数据。
+
+除了原子性，`WriteBatch` 也能加速更新过程，因为可以把一大批独立的操作添加到同一个 batch 中然后一次性执行。
+
 ## Synchronous Writes
 
 By default, each write to leveldb is asynchronous: it returns after pushing the
@@ -102,6 +120,8 @@ not return until the data being written has been pushed all the way to
 persistent storage. (On Posix systems, this is implemented by calling either
 `fsync(...)` or `fdatasync(...)` or `msync(..., MS_SYNC)` before the write
 operation returns.)
+
+默认 leveldb 每个写操作都是异步的：进程把要写的内容 push 给操作系统后立马返回。从操作系统内存到底层持久性存储的迁移异步地发生。当然，也可以把某个写操作的 sync 标识打开，以等到数据真正被记录到持久化存储再让写操作返回。（在 Posix 系统上，这是通过在写操作返回前调用 `fsync(...)` 或 `fdatasync(...)` 或 `msync(..., MS_SYNC)` 来实现的。）
 
 ```c++
 leveldb::WriteOptions write_options;
@@ -116,6 +136,8 @@ process (i.e., not a reboot) will not cause any loss since even when sync is
 false, an update is pushed from the process memory into the operating system
 before it is considered done.
 
+异步写通常比同步写快一千倍。异步写的缺点是，一旦机器崩溃可能会导致最后几个更新操作丢失。注意，仅仅是写进程崩溃（而非机器重启）将不会引起任何更新操作丢失，因为哪怕 sync 标识为 false，写数据也已经从进程内存 push 到了操作系统。
+
 Asynchronous writes can often be used safely. For example, when loading a large
 amount of data into the database you can handle lost updates by restarting the
 bulk load after a crash. A hybrid scheme is also possible where every Nth write
@@ -123,10 +145,14 @@ is synchronous, and in the event of a crash, the bulk load is restarted just
 after the last synchronous write finished by the previous run. (The synchronous
 write can update a marker that describes where to restart on a crash.)
 
+异步写总是可以安全使用。比如你要将大量的数据写入数据库，如果丢失了最后几个更新操作，你可以重启整个写过程。如果数据量非常大，一个优化点是，每进行 N 个异步写操作则进行一次同步地写操作，如果期间发生了崩溃，重启自从上一个成功的同步写操作以来的更新操作即可。（同步的写操作能够更新一个标识，该标识描述了应该从哪个地方开始重启更新操作。）
+
 `WriteBatch` provides an alternative to asynchronous writes. Multiple updates
 may be placed in the same WriteBatch and applied together using a synchronous
 write (i.e., `write_options.sync` is set to true). The extra cost of the
 synchronous write will be amortized across all of the writes in the batch.
+
+`WriteBatch` 可以作为异步写操作的替代品。多个更新操作可以放到同一个 WriteBatch 中然后通过一次同步写（即 `write_options.sync` 置为 false）一起应用。
 
 ## Concurrency
 
@@ -321,6 +347,8 @@ benefit in using blocks smaller than one kilobyte, or larger than a few
 megabytes. Also note that compression will be more effective with larger block
 sizes.
 
+leveldb 把相邻的 keys 组织在同一个 block 中，而且 block 是 leveldb 把数据从内存到转移到持久化存储和从持久化存储转移到内存的基本单位。默认的 block 大约为 4KB，压缩前。一次性处理大块数据的应用可能希望把整个值调大，每次随机读取某个数据的应用可能希望这个值小一点，这样可能性能会更高一些。但是，没有证据表名该值小于 1KB 或者大于几个 MB 的时候性能会表现更好。同时要注意，针对大的 block size，数据压缩后效率更高。
+
 ### Compression
 
 Each block is individually compressed before being written to persistent
@@ -340,6 +368,8 @@ options.compression = leveldb::kNoCompression;
 The contents of the database are stored in a set of files in the filesystem and
 each file stores a sequence of compressed blocks. If options.block_cache is
 non-NULL, it is used to cache frequently used uncompressed block contents.
+
+数据库的内容存储在文件系统的一组文件里，每个文件保存着一系列压缩后的 blocks。如果 options.block_cache 不为空，它就会被用于缓存频繁被使用的 block 内容（已解压缩）。
 
 ```c++
 #include "leveldb/cache.h"
@@ -361,6 +391,10 @@ buffer cache, or any custom Env implementation provided by the client.)
 When performing a bulk read, the application may wish to disable caching so that
 the data processed by the bulk read does not end up displacing most of the
 cached contents. A per-iterator option can be used to achieve this:
+
+注意 cache 保存的是未压缩的数据，因此应该根据应用程序所需的数据大小来设置这个值。（缓存压缩数据的活儿交给操作系统的 buffer cache 或者用户提供的定制的 Env 实现去干。）
+
+当执行一个大块数据读操作时，应用程序可能想要取消缓存功能，这样通过大块读进来数据就不会替换 cache 中当前大部分数据。我们可以为它提供一个单独的 iterator 来达到目的：
 
 ```c++
 leveldb::ReadOptions options;
@@ -389,11 +423,22 @@ We might want to prefix filename keys with one letter (say '/') and the
 `file_block_id` keys with a different letter (say '0') so that scans over just
 the metadata do not force us to fetch and cache bulky file contents.
 
+注意，磁盘传输的单位以及磁盘缓存的单位时一个 block。相邻的 keys（已排序）将总是在同一个 block 中。因此应用程序可以通过把总是差不多需要一起访问的 keys 和经常使用的 keys 放到一个独立的键空间区域来提升性能。
+
+举个例子，假设我们正基于 leveldb 实现一个简单的文件系统。我们打算存储到这个文件系统的数据项类型如下：
+
+    filename -> permission-bits, length, list of file_block_ids
+    file_block_id -> data
+
+我们可以把上面表示 filename 的 keys 增加一个字符前缀，比如 '/'，然后 `file_block_id` keys 增加一个不同的前缀，比如 '0'，这样这些 keys 就具有了各自独立的键空间区域，扫描元数据的时候我们就不用读取和缓存大块文件数据了。
+
 ### Filters
 
 Because of the way leveldb data is organized on disk, a single `Get()` call may
 involve multiple reads from disk. The optional FilterPolicy mechanism can be
 used to reduce the number of disk reads substantially.
+
+鉴于 leveldb 数据的组织形式，一次 `Get()` 调用可能设计多次磁盘读操作。可选的 FilterPolicy 机制可以大幅减少磁盘读次数。
 
 ```c++
 leveldb::Options options;
@@ -492,6 +537,8 @@ implementation are routed through a `leveldb::Env` object. Sophisticated clients
 may wish to provide their own Env implementation to get better control.
 For example, an application may introduce artificial delays in the file IO
 paths to limit the impact of leveldb on other activities in the system.
+
+由 leveldb 发起的全部文件操作以及其它的操作系统调用最后都会被路由给一个 `leveldb::Env` 对象。 用户也可以提供自己的 Env 实现以实现更好的控制。比如，如果应用程序想要针对 leveldb 的文件 IO 引入一个人工延迟以限制 leveldb 对同一个系统中其它应用的影响。
 
 ```c++
 class SlowEnv : public leveldb::Env {
