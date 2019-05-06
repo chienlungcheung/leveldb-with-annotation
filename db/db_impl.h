@@ -135,6 +135,7 @@ class DBImpl : public DB {
   FileLock* db_lock_; // 针对 DB 状态的访问需要使用该锁进行同步
 
   // State below is protected by mutex_
+  // mutex_ 后面的成员变量均由它来守护
   port::Mutex mutex_;
   port::AtomicPointer shutting_down_;
   port::CondVar background_work_finished_signal_ GUARDED_BY(mutex_);
@@ -178,9 +179,12 @@ class DBImpl : public DB {
 
   // Per level compaction stats.  stats_[level] stores the stats for
   // compactions that produced data for the specified "level".
+  // 每个 level 的压实状态。
   struct CompactionStats {
+    // 压实过程耗费的时间，单位毫秒
     int64_t micros;
     int64_t bytes_read;
+    // 压实过程要写入的字节数
     int64_t bytes_written;
 
     CompactionStats() : micros(0), bytes_read(0), bytes_written(0) { }
@@ -191,6 +195,7 @@ class DBImpl : public DB {
       this->bytes_written += c.bytes_written;
     }
   };
+  // 每个 level 对应一个压实状态
   CompactionStats stats_[config::kNumLevels] GUARDED_BY(mutex_);
 
   // No copying allowed

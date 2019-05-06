@@ -105,6 +105,7 @@ class LEVELDB_EXPORT Iterator {
 LEVELDB_EXPORT Iterator* NewEmptyIterator();
 
 // Return an empty iterator with the specified status.
+// 基于指定状态返回一个空迭代器
 LEVELDB_EXPORT Iterator* NewErrorIterator(const Status& status);
 
 }  // namespace leveldb

@@ -143,16 +143,19 @@ class Version {
   // Return the level at which we should place a new memtable compaction
   // result that covers the range [smallest_user_key,largest_user_key].
   //
-  // 依据与区间 [smallest_user_key,largest_user_key] 的重叠情况获取要进行压实的 level。
-  // todo 需要确认该方法怎么使用的，以及参数具体是什么
+  // 一个 memtable 对应一个 [smallest_user_key,largest_user_key] 区间，
+  // 我们将该 memtable 构造成一个 Table 文件后，需要为该文件寻找一个落脚的 level。
+  // 该方法所作的即是依据与区间 [smallest_user_key,largest_user_key] 的重叠情况获取可以存储对应 Table 文件的 level。
+  // 具体选取过错与压实策略有关。
   int PickLevelForMemTableOutput(const Slice& smallest_user_key,
                                  const Slice& largest_user_key);
 
-  // 返回 leven 指定层的文件个数
+  // 返回指定 level 对应的文件个数
   int NumFiles(int level) const { return files_[level].size(); }
 
   // Return a human readable string that describes this version's contents.
-  // 返回一个对人类友好的描述该 version 内容的字符串
+  // 返回一个对人类友好的描述该 version 内容的字符串，具体内容为每个 level 的全部文件的
+  // 相关信息，这些信息包含每个文件的号码、文件大小、起止 key。
   std::string DebugString() const;
 
  private:

@@ -74,22 +74,28 @@ Status BuildTable(const std::string& dbname,
 
     if (s.ok()) {
       // Verify that the table is usable
+      // 检查 table 是否可用
       Iterator* it = table_cache->NewIterator(ReadOptions(),
                                               meta->number,
                                               meta->file_size);
+      // 如果 table 不可用，则 it 为一个无效迭代器，其对应状态也是 non-ok 的。
       s = it->status();
+      // 无效迭代器也是可以删除的
       delete it;
     }
   }
 
   // Check for input iterator errors
+  // 检查输入迭代器的状态
   if (!iter->status().ok()) {
     s = iter->status();
   }
 
+  // 中间未发生错误，并且构造的 Table 文件大小大于 0，则成功
   if (s.ok() && meta->file_size > 0) {
     // Keep it
   } else {
+    // 发生了错误或者迭代器 iter 对应的 memtable 为空，则删除创建的文件
     env->DeleteFile(fname);
   }
   return s;

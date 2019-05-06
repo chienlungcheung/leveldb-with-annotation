@@ -169,7 +169,8 @@ bool SomeFileOverlapsRange(
     // 构建 smallest_user_key 对应的 internal_key，即使用 smallest_user_key 和最大的序列号、最大的操作类型进行拼接
     InternalKey small(*smallest_user_key, kMaxSequenceNumber, kValueTypeForSeek);
     // 在 files 中寻找最大 key 大于等于 smallest_user_key 的第一个文件.
-    // 注意这里查的是第一个，因为后面还要比较 largest_user_key 与该文件最小 key 的关系，如果该文件最小 key 都大于 largest_user_key，
+    // 注意这里查的是第一个，因为后面还要比较 largest_user_key 与该文件最小 key 的关系，
+    // 如果该文件最小 key 都大于 largest_user_key，
     // 那么无疑后面的文件最小 key 肯定也都大于 largest_user_key。
     index = FindFile(icmp, files, small.Encode());
   }
@@ -715,7 +716,8 @@ void Version::GetOverlappingInputs(
 
 std::string Version::DebugString() const {
   std::string r;
-  for (int level = 0; level < config::kNumLevels; level++) { // 遍历每一个 level
+  // 遍历每一个 level
+  for (int level = 0; level < config::kNumLevels; level++) {
     // 每个 level 输出就是下面这个形式，
     // 17 表示的 file number，123 表示的 file size，
     // 中括号第一个值表示该 file 最小的 internal_key，然后省略号，第二个值表示该 file 最大的 internal_key

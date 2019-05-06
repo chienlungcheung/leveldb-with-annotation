@@ -54,7 +54,7 @@ static const char* EncodeKey(std::string* scratch, const Slice& target) {
   return scratch->data();
 }
 
-// 一个 wrapper，内部封装了一个干活的 iterator
+// 一个 wrapper，内部封装了一个干活的 skiplist::iterator
 class MemTableIterator: public Iterator {
  public:
   explicit MemTableIterator(MemTable::Table* table) : iter_(table) { }
@@ -71,11 +71,13 @@ class MemTableIterator: public Iterator {
     return GetLengthPrefixedSlice(key_slice.data() + key_slice.size());
   }
 
+  // 该迭代器默认返回 OK
   virtual Status status() const { return Status::OK(); }
 
  private:
   MemTable::Table::Iterator iter_;
-  std::string tmp_;       // For passing to EncodeKey 用于 EncodeKey 方法存储编码后的 internal_key
+  // 用于 EncodeKey 方法存储编码后的 internal_key
+  std::string tmp_;       // For passing to EncodeKey
 
   // No copying allowed
   MemTableIterator(const MemTableIterator&);

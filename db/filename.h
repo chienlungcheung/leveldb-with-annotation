@@ -35,6 +35,8 @@ std::string LogFileName(const std::string& dbname, uint64_t number);
 // Return the legacy file name for an sstable with the specified number
 // in the db named by "dbname". The result will be prefixed with
 // "dbname".
+// 基于 dbname 标识的数据库中具体的号码为一个 sstable 返回其对应的老式文件名。
+// 返回的结果将会以 dbname 为前缀。
 std::string SSTTableFileName(const std::string& dbname, uint64_t number);
 
 // Return the name of the descriptor file for the db named by

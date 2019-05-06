@@ -679,7 +679,8 @@ class PosixEnv : public Env {
   }
 
   Status DeleteFile(const std::string& filename) override {
-    if (::unlink(filename.c_str()) != 0) { // 解除某个文件的一个引用，如果引用数目变为 0，则删除文件。
+    // 解除某个文件的一个引用，如果引用数目变为 0，则删除文件。
+    if (::unlink(filename.c_str()) != 0) {
       return PosixError(filename, errno);
     }
     return Status::OK();

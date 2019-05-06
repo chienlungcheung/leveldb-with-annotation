@@ -507,8 +507,11 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
 
   Status s;
   {
+    // 构造 Table 文件的时候与 mutex_ 要守护的成员变量无关，可以解除锁定
     mutex_.Unlock();
+    // 基于 memtable 的迭代器 iter 构造一个 Table 文件
     s = BuildTable(dbname_, env_, options_, table_cache_, iter, &meta);
+    // 构造完毕，重新获取锁，诸如 pending_outputs_ 需要 mutex_ 来守护
     mutex_.Lock();
   }
 
@@ -517,6 +520,7 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
       (unsigned long long) meta.file_size,
       s.ToString().c_str());
   delete iter;
+  // meta->number 对应的文件已经写入磁盘
   pending_outputs_.erase(meta.number);
 
 
@@ -525,15 +529,19 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
   // 如果 file_size 等于 0，则对应文件已经被删除了而且不应该加入到 manifest 中。
   int level = 0;
   if (s.ok() && meta.file_size > 0) {
+    // meta 相关成员信息在 BuildTable 时填充过了
     const Slice min_user_key = meta.smallest.user_key();
     const Slice max_user_key = meta.largest.user_key();
     if (base != nullptr) {
+      // 为 [min_user_key, max_user_key] 对应的 Table 文件找一个落脚的 level
       level = base->PickLevelForMemTableOutput(min_user_key, max_user_key);
     }
+    // 将 [min_user_key, max_user_key] 对应的 Table 文件放到找到的 level 中
     edit->AddFile(level, meta.number, meta.file_size,
                   meta.smallest, meta.largest);
   }
 
+  // 将本次压实过程对应的数据存储到 level 层对应的压实状态中
   CompactionStats stats;
   stats.micros = env_->NowMicros() - start_micros;
   stats.bytes_written = meta.file_size;
