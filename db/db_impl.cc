@@ -490,7 +490,7 @@ Status DBImpl::RecoverLogFile(uint64_t log_number, bool last_log,
   return status;
 }
 
-// 将 mem 对应的 memtable 以 table 文件形式保存到最新 version 的 level-0
+// 将 mem 对应的 memtable 以 table 文件形式保存到最新 version 的合适的 level 中
 Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
                                 Version* base) {
   mutex_.AssertHeld();
@@ -536,7 +536,7 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
       // 为 [min_user_key, max_user_key] 对应的 Table 文件找一个落脚的 level
       level = base->PickLevelForMemTableOutput(min_user_key, max_user_key);
     }
-    // 将 [min_user_key, max_user_key] 对应的 Table 文件放到找到的 level 中
+    // 将 [min_user_key, max_user_key] 对应的 Table 文件元信息及其 level 记录到 edit 中
     edit->AddFile(level, meta.number, meta.file_size,
                   meta.smallest, meta.largest);
   }
@@ -556,32 +556,39 @@ void DBImpl::CompactMemTable() {
   // Save the contents of the memtable as a new Table
   // 将内存中的 memtable 内容保存为 table 文件
   VersionEdit edit;
-  // 返回当前 dbimpl 对应的最新 version
+  // 获取当前 dbimpl 对应的最新 version
   Version* base = versions_->current();
   // 将该 version 活跃引用计数加一
   base->Ref();
-  // 将 imm_ 对应的 memtable 以 table 文件形式保存到最新 version 的 level-0
+  // 将 imm_ 对应的 memtable 以 table 文件形式保存到最新 version 的合适 level 中
   Status s = WriteLevel0Table(imm_, &edit, base);
+  // 将该 version 活跃引用计数减一
   base->Unref();
 
+  // 如果压实 memtable 过程中发生了删除 DB 的情况则报错
   if (s.ok() && shutting_down_.Acquire_Load()) {
     s = Status::IOError("Deleting DB during memtable compaction");
   }
 
   // Replace immutable memtable with the generated Table
+  // 用生成的 Table 替换不可变的 memtable
   if (s.ok()) {
     edit.SetPrevLogNumber(0);
+    // memetable 已经转换为 Table 写入磁盘了，之前的 logs 都不需要了。
     edit.SetLogNumber(logfile_number_);  // Earlier logs no longer needed
     s = versions_->LogAndApply(&edit, &mutex_);
   }
 
   if (s.ok()) {
     // Commit to the new state
+    // 压实完成，释放引用
     imm_->Unref();
     imm_ = nullptr;
     has_imm_.Release_Store(nullptr);
+    // 删除过期文件
     DeleteObsoleteFiles();
   } else {
+    // 压实失败，记录错误
     RecordBackgroundError(s);
   }
 }

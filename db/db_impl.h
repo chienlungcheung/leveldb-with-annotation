@@ -89,6 +89,9 @@ class DBImpl : public DB {
   // Compact the in-memory write buffer to disk.  Switches to a new
   // log-file/memtable and writes a new descriptor iff successful.
   // Errors are recorded in bg_error_.
+  // 将内存中的 memtable 转换为 Table 文件并写入到磁盘中。
+  // 当且仅当该方法执行成功后，切换到一组新的 log-file/memetable 组合并且写一个新的描述符。
+  // 如果执行失败，则将错误记录到 bg_error_。
   void CompactMemTable() EXCLUSIVE_LOCKS_REQUIRED(mutex_);
 
   Status RecoverLogFile(uint64_t log_number, bool last_log, bool* save_manifest,

@@ -747,24 +747,31 @@ std::string Version::DebugString() const {
 // A helper class so we can efficiently apply a whole sequence
 // of edits to a particular state without creating intermediate
 // Versions that contain full copies of the intermediate state.
+// 一个辅助类，帮助我们在不创建中间 Versions（包含中间状态的全量拷贝）的前提下高效地将一系列编辑应用到一个特定的状态。
 class VersionSet::Builder {
  private:
   // Helper to sort by v->files_[file_number].smallest
+  // 辅助类：用于基于 v->files_[file_number].smallest 进行排序
   struct BySmallestKey {
     const InternalKeyComparator* internal_comparator;
 
+    // 先基于文件的最小 key 进行比较，谁的文 key 越小谁越大；
+    // 当两个文件的最小 key 一样大的时候，谁的文件编号越小谁越大。
     bool operator()(FileMetaData* f1, FileMetaData* f2) const {
       int r = internal_comparator->Compare(f1->smallest, f2->smallest);
       if (r != 0) {
         return (r < 0);
       } else {
         // Break ties by file number
+        // 当两个文件的最小 key 一样大的时候，谁的文件编号越小谁越大
         return (f1->number < f2->number);
       }
     }
   };
 
+  // 第一个参数是 key 类型，第二个参数是比较器类型
   typedef std::set<FileMetaData*, BySmallestKey> FileSet;
+  // level 状态，包括被删除的文件编号集合和新增的文件集合
   struct LevelState {
     std::set<uint64_t> deleted_files;
     FileSet* added_files;
@@ -772,6 +779,7 @@ class VersionSet::Builder {
 
   VersionSet* vset_;
   Version* base_;
+  // 每个 level 一个
   LevelState levels_[config::kNumLevels];
 
  public:
@@ -788,10 +796,13 @@ class VersionSet::Builder {
   }
 
   ~Builder() {
+    // 遍历每一层，如果新增文件集合中的文件不再使用则删除之
     for (int level = 0; level < config::kNumLevels; level++) {
       const FileSet* added = levels_[level].added_files;
       std::vector<FileMetaData*> to_unref;
       to_unref.reserve(added->size());
+      // todo 不知道为啥要拷贝一份，为啥不把下面循环里的事情一起干了？
+      // 可能是避免每次删除都要调整树的平衡吧（红黑数插入、删除、检索时间复杂度都为 O(logN)。
       for (FileSet::const_iterator it = added->begin();
           it != added->end(); ++it) {
         to_unref.push_back(*it);
@@ -805,10 +816,12 @@ class VersionSet::Builder {
         }
       }
     }
+    // 将 base_ 引用的 Version 引用计数减一
     base_->Unref();
   }
 
   // Apply all of the edits in *edit to the current state.
+  // 将 edit 中包含的全部编辑操作导入到 LevelState 数组中
   void Apply(VersionEdit* edit) {
     // Update compaction pointers
     for (size_t i = 0; i < edit->compact_pointers_.size(); i++) {
@@ -818,6 +831,7 @@ class VersionSet::Builder {
     }
 
     // Delete files
+    // 将 edit 中保存的待删除文件集合导入到 levels_[].deleted_files 中
     const VersionEdit::DeletedFileSet& del = edit->deleted_files_;
     for (VersionEdit::DeletedFileSet::const_iterator iter = del.begin();
          iter != del.end();
@@ -828,6 +842,7 @@ class VersionSet::Builder {
     }
 
     // Add new files
+    // 将 edit 中保存的新增文件集合导入到 levels_[].added_files 中
     for (size_t i = 0; i < edit->new_files_.size(); i++) {
       const int level = edit->new_files_[i].first;
       FileMetaData* f = new FileMetaData(edit->new_files_[i].second);
@@ -846,9 +861,22 @@ class VersionSet::Builder {
       // same as the compaction of 40KB of data.  We are a little
       // conservative and allow approximately one seek for every 16KB
       // of data before triggering a compaction.
+      // 经过一定次数查询后再自动进行压实操作。我们假设：
+      //    （1）一次查询消耗 10ms
+      //    （2）写或者读 1MB 数据消耗 10ms（即 100MB/s）
+      //    （3）1MB 数据的压实做了 25MB 数据的 IO 工作：
+      //        从 level-L 读取了 1MB
+      //        从 level-(L+1) 读取了 10-12MB（边界可能没有对齐）重叠数据
+      //        将压实后的 10-12MB 数据写入到 level-(L+1)
+      // 基于上述假设，我们可以得出，执行 25 次查询消耗的时间与压实 1MB 数据的时间相同，都是 250ms。
+      // 也就是说，一次查询大约相当于压实 40KB （=1MB/25）数据。我们保守一些，就当一次查询相当于压实 16KB 数据。
+      //
+      // 压实之前该文件允许被查询的次数为[文件字节数/16KiB]
       f->allowed_seeks = (f->file_size / 16384);
+      // 如果允许查询次数小于 100，则按 100 次处理。
       if (f->allowed_seeks < 100) f->allowed_seeks = 100;
 
+      // todo 一个文件会同时出现在删除列表和新增列表？
       levels_[level].deleted_files.erase(f->number);
       levels_[level].added_files->insert(f);
     }
@@ -861,36 +889,48 @@ class VersionSet::Builder {
     for (int level = 0; level < config::kNumLevels; level++) {
       // Merge the set of added files with the set of pre-existing files.
       // Drop any deleted files.  Store the result in *v.
+      // Version base_ 中 level 对应的文件列表
       const std::vector<FileMetaData*>& base_files = base_->files_[level];
       std::vector<FileMetaData*>::const_iterator base_iter = base_files.begin();
       std::vector<FileMetaData*>::const_iterator base_end = base_files.end();
+      // level 对应的新增文件集合
       const FileSet* added = levels_[level].added_files;
+      // 将 Version v 中 level 对应的文件列表大小扩张为 Version base_ 中 level 对应的文件列表大小加上新增文件集合大小
       v->files_[level].reserve(base_files.size() + added->size());
+      // 遍历新增文件集合
       for (FileSet::const_iterator added_iter = added->begin();
            added_iter != added->end();
            ++added_iter) {
         // Add all smaller files listed in base_
+        // 针对每个新增文件 *added_iter，从 level 对应的当前文件列表中寻找第一个大于它的迭代器位置，寻找过程采用 cmp 比较器
         for (std::vector<FileMetaData*>::const_iterator bpos
                  = std::upper_bound(base_iter, base_end, *added_iter, cmp);
              base_iter != bpos;
              ++base_iter) {
+          // 将 bpos 之前的 *base_iter 指向的文件追加到 Version v 的对应 level 的文件列表中
           MaybeAddFile(v, level, *base_iter);
         }
 
+        // 将 *added_iter 追加到 Version v 的对应 level 的文件列表中
         MaybeAddFile(v, level, *added_iter);
       }
 
       // Add remaining base files
+      // 将 Version base_ 中 level 对应的文件列表剩余的文件追加到 Version v 的对应 level 的文件列表中
       for (; base_iter != base_end; ++base_iter) {
         MaybeAddFile(v, level, *base_iter);
       }
 
 #ifndef NDEBUG
       // Make sure there is no overlap in levels > 0
+      // 确保 Version v 中大于 0 的 level 内部文件之间不互相重叠
       if (level > 0) {
         for (uint32_t i = 1; i < v->files_[level].size(); i++) {
+          // 前一个文件的最大 key
           const InternalKey& prev_end = v->files_[level][i-1]->largest;
+          // 当前文件的最小 key
           const InternalKey& this_begin = v->files_[level][i]->smallest;
+          // “前一个文件的最大 key”如果大于“当前文件的最小 key” 就说明发生重叠了
           if (vset_->icmp_.Compare(prev_end, this_begin) >= 0) {
             fprintf(stderr, "overlapping ranges in same level %s vs. %s\n",
                     prev_end.DebugString().c_str(),
@@ -904,15 +944,18 @@ class VersionSet::Builder {
   }
 
   void MaybeAddFile(Version* v, int level, FileMetaData* f) {
+    // 如果 f 在 deleted_files 中，表示它已经被安排删除了，则什么也不做
     if (levels_[level].deleted_files.count(f->number) > 0) {
       // File is deleted: do nothing
     } else {
       std::vector<FileMetaData*>* files = &v->files_[level];
       if (level > 0 && !files->empty()) {
         // Must not overlap
+        // 确保新加入的 f 与当前文件列表最后的文件（也是 smallest 和 largest 最大的文件）没有重叠
         assert(vset_->icmp_.Compare((*files)[files->size()-1]->largest,
                                     f->smallest) < 0);
       }
+      // 将 f 引用计数加一并将其加入到 Version v 的文件列表中
       f->refs++;
       files->push_back(f);
     }
@@ -955,9 +998,11 @@ void VersionSet::AppendVersion(Version* v) {
     current_->Unref();
   }
   current_ = v;
+  // current_ 引用了 v，将 v 引用计数加一
   v->Ref();
 
   // Append to linked list
+  // 将 v 加入到双向循环链表中
   v->prev_ = dummy_versions_.prev_;
   v->next_ = &dummy_versions_;
   v->prev_->next_ = v;

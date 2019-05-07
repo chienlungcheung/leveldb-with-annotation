@@ -41,8 +41,9 @@ void VersionEdit::Clear() {
   new_files_.clear();
 }
 
-// 将该 VersionEdit 对象序列化到 dst 指定内存中
 void VersionEdit::EncodeTo(std::string* dst) const {
+  // 每个成员都对应一个 tag
+
   if (has_comparator_) {
     PutVarint32(dst, kComparator);
     PutLengthPrefixedSlice(dst, comparator_);
@@ -112,8 +113,8 @@ static bool GetLevel(Slice* input, int* level) {
   }
 }
 
-// 将 src 保存的数据反序列化到当前 VersionEdit 对象中
 Status VersionEdit::DecodeFrom(const Slice& src) {
+  // 重置当前 VersionSet 对象状态
   Clear();
   Slice input = src;
   const char* msg = nullptr;
@@ -133,7 +134,8 @@ Status VersionEdit::DecodeFrom(const Slice& src) {
           comparator_ = str.ToString();
           has_comparator_ = true;
         } else {
-          msg = "comparator name"; // 表示解析 comparator name 失败
+          // 表示解析 comparator name 失败
+          msg = "comparator name";
         }
         break;
 
@@ -216,7 +218,6 @@ Status VersionEdit::DecodeFrom(const Slice& src) {
   return result;
 }
 
-// 将 VersionEdit 对象以人类友好的方式打印出来
 std::string VersionEdit::DebugString() const {
   std::string r;
   r.append("VersionEdit {");

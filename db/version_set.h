@@ -180,6 +180,7 @@ class Version {
                           bool (*func)(void*, int, FileMetaData*));
   // 该 version 所属的 VersionSet
   VersionSet* vset_;            // VersionSet to which this Version belongs
+  // 接下来两个指针使得 Version 可以构成双向循环链表
   // 链表中下个 version 指针
   Version* next_;               // Next version in linked list
   // 链表中前个 version 指针
@@ -398,6 +399,8 @@ class VersionSet {
   // Save current contents to *log
   Status WriteSnapshot(log::Writer* log);
 
+  // 每个 VersionSet 包含一组 Version，这里是将 Version 加入到该 VersionSet 中,
+  // 具体操作为将 v 插入到双向循环链表，且位于 dummy_versions_ 前面。
   void AppendVersion(Version* v);
 
   Env* const env_;
@@ -414,7 +417,10 @@ class VersionSet {
   // Opened lazily
   WritableFile* descriptor_file_;
   log::Writer* descriptor_log_;
+  // 属于该 VersionSet 的 Version 都会被维护到一个双向循环链表中，
+  // 而且新加入的 Version 都会插入到 dummy_versions_ 前面。
   Version dummy_versions_;  // Head of circular doubly-linked list of versions.
+  // 指向最新加入的 Version
   Version* current_;        // == dummy_versions_.prev_
 
   // Per-level key at which the next compaction at that level should start.
