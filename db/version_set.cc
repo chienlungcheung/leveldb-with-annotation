@@ -771,7 +771,7 @@ class VersionSet::Builder {
 
   // 第一个参数是 key 类型，第二个参数是比较器类型
   typedef std::set<FileMetaData*, BySmallestKey> FileSet;
-  // level 状态，包括被删除的文件编号集合和新增的文件集合
+  // 描述 level 的状态，包括被删除的文件编号集合和新增的文件集合
   struct LevelState {
     std::set<uint64_t> deleted_files;
     FileSet* added_files;
@@ -821,7 +821,8 @@ class VersionSet::Builder {
   }
 
   // Apply all of the edits in *edit to the current state.
-  // 将 edit 中包含的全部编辑操作导入到 LevelState 数组中
+  // 将 edit 中包含的全部编辑操作导入到该 Builder 的 LevelState[] 中,
+  // 后续会调用 Builder::SaveTo 方法将其与 Version base_（通常是 current Version）进行合并然后保存到新的 version 中。
   void Apply(VersionEdit* edit) {
     // Update compaction pointers
     for (size_t i = 0; i < edit->compact_pointers_.size(); i++) {
@@ -883,54 +884,56 @@ class VersionSet::Builder {
   }
 
   // Save the current state in *v.
+  // 将 Version base_ 和 Builder 全部 LevelState 中的数据合并保存到 Version v 中
   void SaveTo(Version* v) {
     BySmallestKey cmp;
     cmp.internal_comparator = &vset_->icmp_;
+    // 将每个 level 的 base_ 和 LevelState 合并到 v 的对应 level 中
     for (int level = 0; level < config::kNumLevels; level++) {
       // Merge the set of added files with the set of pre-existing files.
       // Drop any deleted files.  Store the result in *v.
-      // Version base_ 中 level 对应的文件列表
+      // Version base_ 中 level-L 对应的文件列表
       const std::vector<FileMetaData*>& base_files = base_->files_[level];
       std::vector<FileMetaData*>::const_iterator base_iter = base_files.begin();
       std::vector<FileMetaData*>::const_iterator base_end = base_files.end();
-      // level 对应的新增文件集合
+      // level-L 对应的新增文件集合
       const FileSet* added = levels_[level].added_files;
-      // 将 Version v 中 level 对应的文件列表大小扩张为 Version base_ 中 level 对应的文件列表大小加上新增文件集合大小
+      // 将 Version v 中 level-L 对应的文件列表大小扩张为 Version base_ 中 level-L 对应的文件列表大小加上 level-L 对应的新增文件集合大小
       v->files_[level].reserve(base_files.size() + added->size());
-      // 遍历新增文件集合
+      // 下面两个循环按照从小到大顺序合并 level-L 对应的 base_ 文件列表和 LevelState 新增文件列表
       for (FileSet::const_iterator added_iter = added->begin();
            added_iter != added->end();
            ++added_iter) {
         // Add all smaller files listed in base_
-        // 针对每个新增文件 *added_iter，从 level 对应的当前文件列表中寻找第一个大于它的迭代器位置，寻找过程采用 cmp 比较器
+        // 针对每个新增文件 *added_iter，从 base_ 的 level-L 对应的当前文件列表中寻找第一个大于它的迭代器位置，寻找过程采用 cmp 比较器
         for (std::vector<FileMetaData*>::const_iterator bpos
                  = std::upper_bound(base_iter, base_end, *added_iter, cmp);
              base_iter != bpos;
              ++base_iter) {
-          // 将 bpos 之前的 *base_iter 指向的文件追加到 Version v 的对应 level 的文件列表中
+          // 将 bpos 之前的 *base_iter 指向的文件追加到 Version v 的对应 level-L 的文件列表中
           MaybeAddFile(v, level, *base_iter);
         }
 
-        // 将 *added_iter 追加到 Version v 的对应 level 的文件列表中
+        // 将 *added_iter 追加到 Version v 的对应 level-L 的文件列表中，即 bpos 位置
         MaybeAddFile(v, level, *added_iter);
       }
 
       // Add remaining base files
-      // 将 Version base_ 中 level 对应的文件列表剩余的文件追加到 Version v 的对应 level 的文件列表中
+      // 将 Version base_ 中 level-L 对应的文件列表剩余的文件追加到 Version v 的对应 level-L 的文件列表中
       for (; base_iter != base_end; ++base_iter) {
         MaybeAddFile(v, level, *base_iter);
       }
 
 #ifndef NDEBUG
       // Make sure there is no overlap in levels > 0
-      // 确保 Version v 中大于 0 的 level 内部文件之间不互相重叠
+      // 确保 Version v 中大于 0 的 level-L 内部文件之间不互相重叠
       if (level > 0) {
         for (uint32_t i = 1; i < v->files_[level].size(); i++) {
           // 前一个文件的最大 key
           const InternalKey& prev_end = v->files_[level][i-1]->largest;
           // 当前文件的最小 key
           const InternalKey& this_begin = v->files_[level][i]->smallest;
-          // “前一个文件的最大 key”如果大于“当前文件的最小 key” 就说明发生重叠了
+          // “前一个文件的最大 key”如果大于“当前文件的最小 key” 就说明发生重叠了，终止并报错
           if (vset_->icmp_.Compare(prev_end, this_begin) >= 0) {
             fprintf(stderr, "overlapping ranges in same level %s vs. %s\n",
                     prev_end.DebugString().c_str(),
@@ -943,6 +946,7 @@ class VersionSet::Builder {
     }
   }
 
+  // 将文件 f 追加到 Version v 的 level 对应的文件列表中
   void MaybeAddFile(Version* v, int level, FileMetaData* f) {
     // 如果 f 在 deleted_files 中，表示它已经被安排删除了，则什么也不做
     if (levels_[level].deleted_files.count(f->number) > 0) {
@@ -1024,10 +1028,14 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
   edit->SetNextFile(next_file_number_);
   edit->SetLastSequence(last_sequence_);
 
+  // 新建一个 Version 用于存储 Builder 输出
   Version* v = new Version(this);
   {
+    // 将当前 version 作为输入构建一个新的 Builder
     Builder builder(this, current_);
+    // 将 VersionEdit 与当前  Version 内容合并
     builder.Apply(edit);
+    // 将 Builder 内容输出到 Version v 中
     builder.SaveTo(v);
   }
   Finalize(v);
@@ -1259,6 +1267,7 @@ void VersionSet::MarkFileNumberUsed(uint64_t number) {
 
 void VersionSet::Finalize(Version* v) {
   // Precomputed best level for next compaction
+  // 预先计算下次压实的最佳 level
   int best_level = -1;
   double best_score = -1;
 
@@ -1276,6 +1285,11 @@ void VersionSet::Finalize(Version* v) {
       // file size is small (perhaps because of a small write-buffer
       // setting, or very high compression ratios, or lots of
       // overwrites/deletions).
+      //
+      // 我们会特殊对待 level-0，限制文件数目而不是字节数目，原因有二：
+      // （1）写缓冲空间越大，越不用去做太多的 level-0 压实。
+      // （2）每次读取的时候都会 merge level-0 文件，因此当个别文件很小（可能因为写缓冲设置的太小或者太高的压缩比或者太多的覆写或者删除）
+      // 的时候我们希望避免产生太多的文件。
       score = v->files_[level].size() /
           static_cast<double>(config::kL0_CompactionTrigger);
     } else {
