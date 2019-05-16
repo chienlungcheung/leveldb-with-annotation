@@ -47,7 +47,7 @@ static int64_t ExpandedCompactionByteSizeLimit(const Options* options) {
   return 25 * TargetFileSize(options);
 }
 
-// 除了 level-0 以外，每个 level 最大字节数。
+// 除了 level-0 以外，每个 level 允许的最大字节数。
 static double MaxBytesForLevel(const Options* options, int level) {
   // Note: the result for level zero is not really used since we set
   // the level-0 compaction threshold based on number of files.
@@ -55,8 +55,10 @@ static double MaxBytesForLevel(const Options* options, int level) {
   // 因为针对 level-0 的压实阈值基于文件个数，默认是超过 4 个就触发。
 
   // Result for both level-0 and level-1
-  double result = 10. * 1048576.0; // 10MB
-  while (level > 1) { // level-L 大小不超过 10^L MB
+  // 10MB
+  double result = 10. * 1048576.0;
+  // level-L 大小不超过 10^L MB
+  while (level > 1) {
     result *= 10;
     level--;
   }
@@ -1038,10 +1040,12 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
     // 将 Builder 内容输出到 Version v 中
     builder.SaveTo(v);
   }
+  // 计算 Version v 下个最适合做压实的 level。
   Finalize(v);
 
   // Initialize new descriptor log file if necessary by creating
   // a temporary file that contains a snapshot of the current version.
+  // 如有必要通过创建一个临时文件来初始化一个新的文件描述符，这个临时文件包含了当前 Version 的一个快照
   std::string new_manifest_file;
   Status s;
   if (descriptor_log_ == nullptr) {
@@ -1265,12 +1269,18 @@ void VersionSet::MarkFileNumberUsed(uint64_t number) {
   }
 }
 
+// 计算 Version v 下个最适合做压实的 level。
+// 计算逻辑如下：
+// - 针对 level-0，计算当前文件个数相对上限的比值
+// - 针对其它 levels，计算每个 level 当前字节数相对于其上限的比值
+// 上述比值最大的那个 level 即为下个适合进行压实的 level。
 void VersionSet::Finalize(Version* v) {
   // Precomputed best level for next compaction
-  // 预先计算下次压实的最佳 level
+  // 计算最适合做压实的 level
   int best_level = -1;
   double best_score = -1;
 
+  // 遍历每个 level，计算每个 level 的 score（当前大小相对于上限的比值），并选择最大的 score 及其 level
   for (int level = 0; level < config::kNumLevels-1; level++) {
     double score;
     if (level == 0) {
@@ -1286,25 +1296,28 @@ void VersionSet::Finalize(Version* v) {
       // setting, or very high compression ratios, or lots of
       // overwrites/deletions).
       //
-      // 我们会特殊对待 level-0，限制文件数目而不是字节数目，原因有二：
+      // 我们会特殊对待 level-0，即限制文件数目而不是字节数目，原因有二：
       // （1）写缓冲空间越大，越不用去做太多的 level-0 压实。
-      // （2）每次读取的时候都会 merge level-0 文件，因此当个别文件很小（可能因为写缓冲设置的太小或者太高的压缩比或者太多的覆写或者删除）
+      // （2）每次读取的时候都会对 level-0 文件做合并，因此当单个文件很小（可能因为写缓冲设置的太小或者太高的压缩比或者太多的覆写或者删除）
       // 的时候我们希望避免产生太多的文件。
       score = v->files_[level].size() /
           static_cast<double>(config::kL0_CompactionTrigger);
     } else {
       // Compute the ratio of current size to size limit.
+      // 计算 level 当前大小相对于针对该 level 的字节上限（一般是 10^L MB）的比率
       const uint64_t level_bytes = TotalFileSize(v->files_[level]);
       score =
           static_cast<double>(level_bytes) / MaxBytesForLevel(options_, level);
     }
 
+    // best_score 保存最大的 score，best_level 保存具有最大 score 的 level
     if (score > best_score) {
       best_level = level;
       best_score = score;
     }
   }
 
+  // score 最大的那个 level 就是下个要进行压实的 level
   v->compaction_level_ = best_level;
   v->compaction_score_ = best_score;
 }

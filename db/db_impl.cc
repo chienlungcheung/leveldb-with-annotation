@@ -490,7 +490,7 @@ Status DBImpl::RecoverLogFile(uint64_t log_number, bool last_log,
   return status;
 }
 
-// 将 mem 对应的 memtable 以 table 文件形式保存到最新 version 的合适的 level 中
+// 将 mem 对应的 memtable 以 table 文件形式保存到磁盘并将其对应的元信息（level、filemeta 等）保存到 edit 中
 Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
                                 Version* base) {
   mutex_.AssertHeld();
@@ -560,7 +560,7 @@ void DBImpl::CompactMemTable() {
   Version* base = versions_->current();
   // 将该 version 活跃引用计数加一
   base->Ref();
-  // 将 imm_ 对应的 memtable 以 table 文件形式保存到最新 version 的合适 level 中
+  // 将 imm_ 对应的 memtable 以 table 文件形式保存到磁盘并将其对应的元信息（level、filemeta 等）保存到 edit 中
   Status s = WriteLevel0Table(imm_, &edit, base);
   // 将该 version 活跃引用计数减一
   base->Unref();

@@ -37,7 +37,7 @@ class VersionEdit {
   VersionEdit() { Clear(); }
   ~VersionEdit() { }
 
-  // 重置该 VersionSet 状态
+  // 重置该 VersionEdit 状态
   void Clear();
 
   // 设置比较器名称
