@@ -32,7 +32,7 @@ class TableCache {
   // by the cache and should not be deleted, and is valid for as long as the
   // returned iterator is live.
   //
-  // 针对给定的 file_number（对应的文件长度也必须恰好是 file_size 字节数），返回一个其对应 table 的 iterator。
+  // 针对给定的 file_number（对应的文件长度也必须恰好是 file_size 字节数），返回一个与其对应 table 的 iterator。
   // 如果 tableptr 非空，设置 *tableptr 指向返回的 iterator 底下的 Table 对象。
   // 返回的 *tableptr 对象由 cache 所拥有，所以用户不要删除它；而且只要 iterator 还活着，该对象即有效。
   Iterator* NewIterator(const ReadOptions& options,

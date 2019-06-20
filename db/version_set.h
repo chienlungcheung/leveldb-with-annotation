@@ -68,7 +68,10 @@ bool SomeFileOverlapsRange(const InternalKeyComparator& icmp,
                            const Slice* smallest_user_key,
                            const Slice* largest_user_key);
 
-// 一个 DBImpl 的表示由一组 Versions 构成
+// 一个 DBImpl 的表示由一组 Versions 构成。
+// 每个 Version 都保存着 db 每个 level 的文件元数据链表，
+// 核心数据成员为 std::vector<FileMetaData*> files_[config::kNumLevels]。
+// （一个 Version 对应一个 DBImpl 快照。）
 class Version {
  public:
   // Append to *iters a sequence of iterators that will
@@ -76,7 +79,7 @@ class Version {
   // REQUIRES: This version has been saved (see VersionSet::SaveTo)
   //
   // 将一系列迭代器追加到 iters 向量里，这些迭代器在被合并后会生成该版本的内容。
-  // 前提：该版本事先已经通过 VersionSet::SaveTo 方法被保存过了。
+  // 前提：当前 Version 对象事先已经通过 VersionSet::SaveTo 方法被保存过了。
   void AddIterators(const ReadOptions&, std::vector<Iterator*>* iters);
 
   // Lookup the value for key.  If found, store it in *val and
@@ -193,7 +196,7 @@ class Version {
   std::vector<FileMetaData*> files_[config::kNumLevels];
 
   // Next file to compact based on seek stats.
-  // 下个待压实的文件
+  // 下个待压实的文件及其所在的 level
   FileMetaData* file_to_compact_;
   int file_to_compact_level_;
 
@@ -220,6 +223,11 @@ class Version {
   void operator=(const Version&);
 };
 
+// 一个 DBImpl 由一组 Versions 构成。
+// 最新的 version 叫做 "current"，较老的 versions 可能也会被保留以为活跃的迭代器提供一致性视图。
+// 每个 Version 跟踪每一个 level 的一组 Table 文件。
+// 全部 versions 集合由 VersionSet 维护。
+// Version，VersionSet 都是兼容线程的，但是在访问的时候需要外部的同步设施。
 class VersionSet {
  public:
   VersionSet(const std::string& dbname,

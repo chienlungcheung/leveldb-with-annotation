@@ -1,5 +1,7 @@
 **LevelDB is a fast key-value storage library written at Google that provides an ordered mapping from string keys to string values.**
 
+**LevelDB 是一个快速的键值存储程序库，提供了字符串形式的 keys 到字符串形式的 values 的有序映射。**
+
 [![Build Status](https://travis-ci.org/google/leveldb.svg?branch=master)](https://travis-ci.org/google/leveldb)
 
 Authors: Sanjay Ghemawat (sanjay@google.com) and Jeff Dean (jeff@google.com)
@@ -16,15 +18,33 @@ Authors: Sanjay Ghemawat (sanjay@google.com) and Jeff Dean (jeff@google.com)
   * Data is automatically compressed using the [Snappy compression library](http://google.github.io/snappy/).
   * External activity (file system operations etc.) is relayed through a virtual interface so users can customize the operating system interactions.
 
+# 特性
+
+  * keys 和 values 都可以是随机的字节数组。
+  * 数据被按照 key 的顺序进行存储。
+  * 调用者可以提供一个定制的比较函数来覆盖默认的比较器。
+  * 基础操作有 `Put(key,value)`, `Get(key)`, `Delete(key)`。
+  * 多个更改可以在一个原子批处理中一起生效。
+  * 用户可以创建一个瞬时快照来获取数据的一致性视图。
+  * 支持针对数据的前向和后向遍历。
+  * 数据通过 Snappy 压缩程序库自动压缩。
+  * 外部行为（文件系统操作等）通过一个虚拟接口被中转，所以用户可以定制文件系统交互行为。
+
 # Documentation
 
   [LevelDB library documentation](https://github.com/google/leveldb/blob/master/doc/index.md) is online and bundled with the source code.
 
-# Limitations
+# 局限性
 
   * This is not a SQL database.  It does not have a relational data model, it does not support SQL queries, and it has no support for indexes.
   * Only a single process (possibly multi-threaded) can access a particular database at a time.
   * There is no client-server support builtin to the library.  An application that needs such support will have to wrap their own server around the library.
+
+# 不足
+
+  * LevelDB 不是 SQL 数据库。它没有关系数据模型，不支持 SQL 查询，也不支持索引。
+  * 同时只能有一个进程（可能是多线程的进程）访问一个特定的数据库。
+  * 该程序库没有内置的客户端-服务端支持。需要该支持的用户需要自己围绕该程序库进行封装。
 
 # Building
 
@@ -38,6 +58,18 @@ cmake -DCMAKE_BUILD_TYPE=Release .. && cmake --build .
 ```
 
 Please see the CMake documentation and `CMakeLists.txt` for more advanced usage.
+
+# 构建
+
+该工程开箱即支持 CMake。
+
+快速开始：
+```bash
+mkdir -p build && cd build
+cmake -DCMAKE_BUILD_TYPE=Release .. && cmake --build
+```
+
+更多高级用法请请参照 CMake 文档和 `CMakeLists.txt`。
 
 # Contributing to the leveldb Project
 

@@ -43,6 +43,9 @@ static int64_t MaxGrandParentOverlapBytes(const Options* options) {
 // Maximum number of bytes in all compacted files.  We avoid expanding
 // the lower level file set of a compaction if it would make the
 // total compaction cover more than this many bytes.
+//
+// 已经被压实的全部文件的最大字节数。
+// 如果一个压实后的文件集合字节数超过该值，那么我们就避免展开它。
 static int64_t ExpandedCompactionByteSizeLimit(const Options* options) {
   return 25 * TargetFileSize(options);
 }
@@ -291,6 +294,9 @@ void Version::AddIterators(const ReadOptions& options,
   // 合并过程就是为各个 table 文件生成相应的两层迭代器，然后将各个迭代器放入 *iters
   for (size_t i = 0; i < files_[0].size(); i++) {
     iters->push_back(
+        // 针对给定的 file_number（对应的文件长度也必须恰好是 file_size 字节数），返回一个与其对应 table 的 iterator。
+        // 如果 tableptr 参数非空，设置 *tableptr 指向返回的 iterator 底下的 Table 对象。
+        // 返回的 *tableptr 对象由 cache 所拥有，所以用户不要删除它；而且只要 iterator 还活着，该对象就有效。
         vset_->table_cache_->NewIterator(
             options, files_[0][i]->number, files_[0][i]->file_size));
   }
@@ -749,7 +755,8 @@ std::string Version::DebugString() const {
 // A helper class so we can efficiently apply a whole sequence
 // of edits to a particular state without creating intermediate
 // Versions that contain full copies of the intermediate state.
-// 一个辅助类，帮助我们在不创建中间 Versions（包含中间状态的全量拷贝）的前提下高效地将一系列编辑应用到一个特定的状态。
+// 一个辅助类，帮助我们在不创建中间 Versions（包含中间状态的全量拷贝）的前提下
+// 高效地将一系列编辑（VersionEdit） 应用到某个 VersionSet 的特定 Version 中。
 class VersionSet::Builder {
  private:
   // Helper to sort by v->files_[file_number].smallest
@@ -786,6 +793,8 @@ class VersionSet::Builder {
 
  public:
   // Initialize a builder with the files from *base and other info from *vset
+  // 使用 Version base 和 VersionSet vset 中其它信息初始化一个 Builder，通常 base 即为
+  // vset 的 Version current_。
   Builder(VersionSet* vset, Version* base)
       : vset_(vset),
         base_(base) {
