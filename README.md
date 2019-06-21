@@ -110,6 +110,11 @@ Here is a performance report (with explanations) from the run of the
 included db_bench program.  The results are somewhat noisy, but should
 be enough to get a ballpark performance estimate.
 
+# 性能
+
+下面是通过运行 db_bench 程序得出的性能测试报告。我们使用的是一个包含一百万数据项的数据库，
+其中 key 是 16 字节，value 是 100 字节，value 压缩后大约是原来的一半。
+
 ## Setup
 
 We use a database with a million entries.  Each entry has a 16 byte
@@ -149,6 +154,9 @@ because the hard disk itself is buffering the update in its memory and
 responding before the data has been written to the platter.  This may
 or may not be safe based on whether or not the hard disk has enough
 power to save its memory in the event of a power failure.
+
+## 写性能
+
 
 ## Read performance
 
