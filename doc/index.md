@@ -302,7 +302,7 @@ a database.  For example, suppose each database key consists of two numbers and
 we should sort by the first number, breaking ties by the second number. First,
 define a proper subclass of `leveldb::Comparator` that expresses these rules:
 
-前面的例子中用的都是默认的比较函数，即逐字节字典序比较函数。
+前面的例子中用的都是默认的比较函数，即逐字节字典序比较函数。你可以定制自己的比较函数，然后在打开数据库的时候传入。只需继承 `leveldb::Comparator` 然后定义相关逻辑即可，下面是一个例子：
 
 ```c++
 class TwoPartComparator : public leveldb::Comparator {
@@ -331,12 +331,17 @@ class TwoPartComparator : public leveldb::Comparator {
 
 Now create a database using this custom comparator:
 
+然后使用上面定义的比较器打开数据库：
+
 ```c++
+// 实例化比较器
 TwoPartComparator cmp;
 leveldb::DB* db;
 leveldb::Options options;
 options.create_if_missing = true;
+// 将比较器赋值给 options.comparator
 options.comparator = &cmp;
+// 打开数据库
 leveldb::Status status = leveldb::DB::Open(options, "/tmp/testdb", &db);
 ...
 ```
@@ -350,6 +355,8 @@ and only if the new key format and comparison function are incompatible with
 existing databases, and it is ok to discard the contents of all existing
 databases.
 
+比较器 Name 方法返回的结果在创建数据库时绑定到数据库上，后续每次打开都会进行检查。如果名称改了，对 `leveldb::DB::Open` 的调用就会失败。因此，当且仅当在新的 key 格式和比较函数与已有的数据库不兼容而且已有数据不再被需要的时候再修改比较器名称。
+
 You can however still gradually evolve your key format over time with a little
 bit of pre-planning. For example, you could store a version number at the end of
 each key (one byte should suffice for most uses). When you wish to switch to a
@@ -358,10 +365,14 @@ new key format (e.g., adding an optional third part to the keys processed by
 version number for new keys (c) change the comparator function so it uses the
 version numbers found in the keys to decide how to interpret them.
 
+你可以根据预先规划一点一点的演进你的 key 格式。比如，你可以存储一个版本号在每个 key 的结尾（大多数场景，一个字节足够了）。当你想要切换到新的 key 格式的时候（比如新增一个第三部分到上面例子 `TwoPartComparator` 处理的 keys 中），（a）保持比较器名称不变（b）递增新 keys 的版本号（c）修改比较器函数以让其使用版本号来决定如何进行排序。
+
 ## Performance
 
 Performance can be tuned by changing the default values of the types defined in
 `include/leveldb/options.h`.
+
+通过修改 `include/leveldb/options.h` 中定义的类型的默认值来对 leveldb 的性能进行调优。
 
 ### Block size
 
@@ -375,7 +386,7 @@ benefit in using blocks smaller than one kilobyte, or larger than a few
 megabytes. Also note that compression will be more effective with larger block
 sizes.
 
-leveldb 把相邻的 keys 组织在同一个 block 中，而且 block 是 leveldb 把数据从内存到转移到持久化存储和从持久化存储转移到内存的基本单位。默认的 block 大约为 4KB，压缩前。一次性处理大块数据的应用可能希望把整个值调大，每次随机读取某个数据的应用可能希望这个值小一点，这样可能性能会更高一些。但是，没有证据表名该值小于 1KB 或者大于几个 MB 的时候性能会表现更好。同时要注意，针对大的 block size，数据压缩后效率更高。
+leveldb 把相邻的 keys 组织在同一个 block 中，而且 block 是 leveldb 把数据从内存到转移到持久化存储和从持久化存储转移到内存的基本单位。默认的 block 大约为 4KB，压缩前。经常处理大块数据的应用可能希望把这个值调大，而针对数据做“点读”的应用可能希望这个值小一点，这样性能可能会更高一些。但是，没有证据表明该值小于 1KB 或者大于几个 MB 的时候性能会表现更好。同时要注意，针对大的 block size，进行压缩效率会更高。
 
 ### Compression
 
@@ -384,6 +395,8 @@ storage. Compression is on by default since the default compression method is
 very fast, and is automatically disabled for uncompressible data. In rare cases,
 applications may want to disable compression entirely, but should only do so if
 benchmarks show a performance improvement:
+
+每个 block 在写入持久存储之前都会被单独压缩。压缩默认是开启的，因为默认的压缩算法非常快，而且对于不能压缩的数据会自动关闭压缩。极少的场景会让用户想要完全关闭压缩功能，除非基准测试显示关闭压缩会显著改善性能。按照下面方式做就关闭了压缩功能：
 
 ```c++
 leveldb::Options options;
@@ -403,8 +416,10 @@ non-NULL, it is used to cache frequently used uncompressed block contents.
 #include "leveldb/cache.h"
 
 leveldb::Options options;
+// 打开数据库之前分配一个 100MB 的 LRU Cache 用于缓存解压的 blocks
 options.block_cache = leveldb::NewLRUCache(100 * 1048576);  // 100MB cache
 leveldb::DB* db;
+// 打开数据库
 leveldb::DB::Open(options, name, &db);
 ... use the db ...
 delete db
@@ -420,14 +435,17 @@ When performing a bulk read, the application may wish to disable caching so that
 the data processed by the bulk read does not end up displacing most of the
 cached contents. A per-iterator option can be used to achieve this:
 
-注意 cache 保存的是未压缩的数据，因此应该根据应用程序所需的数据大小来设置这个值。（缓存压缩数据的活儿交给操作系统的 buffer cache 或者用户提供的定制的 Env 实现去干。）
+注意 cache 保存的是未压缩的数据，因此应该根据应用程序所需的数据大小来设置它的大小。（已经压缩的数据的缓存工作交给操作系统的 buffer cache 或者用户提供的定制的 Env 实现去干。）
 
-当执行一个大块数据读操作时，应用程序可能想要取消缓存功能，这样通过大块读进来数据就不会替换 cache 中当前大部分数据。我们可以为它提供一个单独的 iterator 来达到目的：
+当执行一个大块数据读操作时，应用程序可能想要取消缓存功能，这样通过大块读进来数据就不会导致 cache 中当前大部分数据被置换出去。我们可以为它提供一个单独的 iterator 来达到目的：
 
 ```c++
 leveldb::ReadOptions options;
+// 缓存设置为关闭
 options.fill_cache = false;
+// 用该设置去创建一个新的迭代器
 leveldb::Iterator* it = db->NewIterator(options);
+// 用该迭代器去处理大块数据
 for (it->SeekToFirst(); it->Valid(); it->Next()) {
   ...
 }
@@ -451,14 +469,14 @@ We might want to prefix filename keys with one letter (say '/') and the
 `file_block_id` keys with a different letter (say '0') so that scans over just
 the metadata do not force us to fetch and cache bulky file contents.
 
-注意，磁盘传输的单位以及磁盘缓存的单位时一个 block。相邻的 keys（已排序）将总是在同一个 block 中。因此应用程序可以通过把总是差不多需要一起访问的 keys 和经常使用的 keys 放到一个独立的键空间区域来提升性能。
+注意，磁盘传输的单位以及磁盘缓存的单位都是一个 block。相邻的 keys（已排序）总是在同一个 block 中。因此应用程序可以通过把需要一起访问的 keys 放在一起，同时把不经常使用的 keys 放到一个独立的键空间区域来提升性能。
 
 举个例子，假设我们正基于 leveldb 实现一个简单的文件系统。我们打算存储到这个文件系统的数据项类型如下：
 
     filename -> permission-bits, length, list of file_block_ids
     file_block_id -> data
 
-我们可以把上面表示 filename 的 keys 增加一个字符前缀，比如 '/'，然后 `file_block_id` keys 增加一个不同的前缀，比如 '0'，这样这些 keys 就具有了各自独立的键空间区域，扫描元数据的时候我们就不用读取和缓存大块文件数据了。
+我们可能想要给上面表示 filename 的键增加一个字符前缀，比如 '/'，然后给表示 `file_block_id` 的键增加另一个不同的前缀，比如 '0'，这样这些不同用途的键就具有了各自独立的键空间区域，扫描元数据的时候我们就不用读取和缓存大块文件内容数据了。
 
 ### Filters
 
@@ -466,12 +484,14 @@ Because of the way leveldb data is organized on disk, a single `Get()` call may
 involve multiple reads from disk. The optional FilterPolicy mechanism can be
 used to reduce the number of disk reads substantially.
 
-鉴于 leveldb 数据的组织形式，一次 `Get()` 调用可能设计多次磁盘读操作。可选的 FilterPolicy 机制可以大幅减少磁盘读次数。
+鉴于 leveldb 数据在磁盘上的组织形式，一次 `Get()` 调用可能涉及多次磁盘读操作。可选的 FilterPolicy 机制可以用来大幅减少磁盘读次数。
 
 ```c++
 leveldb::Options options;
+// 设置启用基于布隆过滤器的过滤策略
 options.filter_policy = NewBloomFilterPolicy(10);
 leveldb::DB* db;
+// 用该设置打开数据库
 leveldb::DB::Open(options, "/tmp/testdb", &db);
 ... use the database ...
 delete db;
@@ -487,12 +507,16 @@ a 100. Increasing the bits per key will lead to a larger reduction at the cost
 of more memory usage. We recommend that applications whose working set does not
 fit in memory and that do a lot of random reads set a filter policy.
 
+上述代码将一个基于布隆过滤器的过滤策略与数据库进行了关联。基于布隆过滤器的过滤方式依赖于如下事实，在内存中保存每个 key 的部分位（在上面例子中是 10 位，因为我们传给 `NewBloomFilterPolicy` 的参数是 10）。这个过滤器将会使得 Get() 调用中非必须的磁盘读操作大约减少 100 倍。增加每个 key 用于过滤器的位数将会进一步减少读磁盘次数，当然也会占用更多内存空间。我们推荐数据集无法全部放入内存同时又存在大量随机读的应用设置一个过滤器策略。
+
 If you are using a custom comparator, you should ensure that the filter policy
 you are using is compatible with your comparator. For example, consider a
 comparator that ignores trailing spaces when comparing keys.
 `NewBloomFilterPolicy` must not be used with such a comparator. Instead, the
 application should provide a custom filter policy that also ignores trailing
 spaces. For example:
+
+如果你在使用定制的比较器，你应该确保你在用的过滤器策略与你的比较器兼容。举个例子，如果一个比较器在比较键的时候忽略结尾的空格，那么`NewBloomFilterPolicy` 一定不能与此比较器共存。相反，应用应该提供一个定制的过滤器策略，而且它也应该忽略键的尾部空格。示例如下：
 
 ```c++
 class CustomFilterPolicy : public leveldb::FilterPolicy {
@@ -507,6 +531,7 @@ class CustomFilterPolicy : public leveldb::FilterPolicy {
 
   void CreateFilter(const Slice* keys, int n, std::string* dst) const {
     // Use builtin bloom filter code after removing trailing spaces
+    // 将尾部空格移除后再使用内置的布隆过滤器
     std::vector<Slice> trimmed(n);
     for (int i = 0; i < n; i++) {
       trimmed[i] = RemoveTrailingSpaces(keys[i]);
@@ -520,15 +545,21 @@ Advanced applications may provide a filter policy that does not use a bloom
 filter but uses some other mechanism for summarizing a set of keys. See
 `leveldb/filter_policy.h` for detail.
 
+高级应用可以自己提供不使用布隆过滤器的过滤器策略，具体见 `leveldb/filter_policy.h`。
+
 ## Checksums
 
 leveldb associates checksums with all data it stores in the file system. There
 are two separate controls provided over how aggressively these checksums are
 verified:
 
+leveldb 将一个校验和与它存储在文件系统中的全部数据进行关联。根据激进程度有两种方式控制校验和的核对：
+
 `ReadOptions::verify_checksums` may be set to true to force checksum
 verification of all data that is read from the file system on behalf of a
 particular read.  By default, no such verification is done.
+
+`ReadOptions::verify_checksums` 可以设置为 true 来强制核对从文件系统读取的全部数据的校验和。默认为 false。
 
 `Options::paranoid_checks` may be set to true before opening a database to make
 the database implementation raise an error as soon as it detects an internal
@@ -536,6 +567,8 @@ corruption. Depending on which portion of the database has been corrupted, the
 error may be raised when the database is opened, or later by another database
 operation. By default, paranoid checking is off so that the database can be used
 even if parts of its persistent storage have been corrupted.
+
+`Options::paranoid_checks` 
 
 If a database is corrupted (perhaps it cannot be opened when paranoid checking
 is turned on), the `leveldb::RepairDB` function may be used to recover as much

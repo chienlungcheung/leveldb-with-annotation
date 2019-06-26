@@ -34,13 +34,13 @@ Authors: Sanjay Ghemawat (sanjay@google.com) and Jeff Dean (jeff@google.com)
 
   [LevelDB library documentation](https://github.com/google/leveldb/blob/master/doc/index.md) is online and bundled with the source code.
 
-# 局限性
+# Limitations
 
   * This is not a SQL database.  It does not have a relational data model, it does not support SQL queries, and it has no support for indexes.
   * Only a single process (possibly multi-threaded) can access a particular database at a time.
   * There is no client-server support builtin to the library.  An application that needs such support will have to wrap their own server around the library.
 
-# 不足
+# 局限性
 
   * LevelDB 不是 SQL 数据库。它没有关系数据模型，不支持 SQL 查询，也不支持索引。
   * 同时只能有一个进程（可能是多线程的进程）访问一个特定的数据库。
