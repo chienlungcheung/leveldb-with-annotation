@@ -152,7 +152,7 @@ may be placed in the same WriteBatch and applied together using a synchronous
 write (i.e., `write_options.sync` is set to true). The extra cost of the
 synchronous write will be amortized across all of the writes in the batch.
 
-`WriteBatch` 可以作为异步写操作的替代品。多个更新操作可以放到同一个 WriteBatch 中然后通过一次同步写（即 `write_options.sync` 置为 false）一起应用。
+`WriteBatch` 可以作为异步写操作的替代品。多个更新操作可以放到同一个 WriteBatch 中然后通过一次同步写（即 `write_options.sync` 置为 true）一起应用。
 
 ## Concurrency
 
@@ -167,11 +167,14 @@ synchronization. If two threads share such an object, they must protect access
 to it using their own locking protocol. More details are available in the public
 header files.
 
+一个数据库一次只能被一个进程打开。LevelDB 的实现从操作系统获取一把锁来阻止误用。在单个进程中，同一个 `leveldb::DB` 对象可以被多个多个并发的线程安全地使用，也就是说，不同的线程可以写入或者获取 iterators，或者针对同一个数据库调用 Get，签署全部操作均不需要借助外部同步设施（leveldb 实现会自动地确保必要的同步）。但是其它对象，比如 Iterator 或者 WriteBatch 需要外部的同步设施。如果两个线程共享此类对象，必须安全地对其访问，具体见对应的头文件。
+
 ## Iteration
 
 The following example demonstrates how to print all key,value pairs in a
 database.
 
+下面的用例展示了如何打印数据库中全部的 key,value 对。
 ```c++
 leveldb::Iterator* it = db->NewIterator(leveldb::ReadOptions());
 for (it->SeekToFirst(); it->Valid(); it->Next()) {
@@ -184,6 +187,8 @@ delete it;
 The following variation shows how to process just the keys in the range
 [start,limit):
 
+下面的用例展示了如何打印 `[start, limit)` 范围内数据:
+
 ```c++
 for (it->Seek(start);
    it->Valid() && it->key().ToString() < limit;
@@ -194,6 +199,8 @@ for (it->Seek(start);
 
 You can also process entries in reverse order. (Caveat: reverse iteration may be
 somewhat slower than forward iteration.)
+
+当然你也可以反向遍历（注意，反向遍历可能比正向遍历要慢一些，具体见 README.md 的读性能基准测试）。
 
 ```c++
 for (it->SeekToLast(); it->Valid(); it->Prev()) {
@@ -209,13 +216,20 @@ read should operate on a particular version of the DB state. If
 `ReadOptions::snapshot` is NULL, the read will operate on an implicit snapshot
 of the current state.
 
+快照提供了针对整个 key-value 存储的一致性的只读视图。`ReadOptions::snapshot` 不为空表示读操作应该作用在 DB 的某个特定版本上；若为空，则读操作将会作用在当前版本的一个隐式的快照上。 
+
 Snapshots are created by the `DB::GetSnapshot()` method:
 
+快照通过调用 `ReadOptions::snapshot` 方法创建： 
 ```c++
 leveldb::ReadOptions options;
+// 更新之前创建一个快照
 options.snapshot = db->GetSnapshot();
+// 更新数据库
 ... apply some updates to db ...
+// 获取之前创建快照的迭代器
 leveldb::Iterator* iter = db->NewIterator(options);
+// 使用该迭代器查看之前快照的状态
 ... read using iter to view the state when the snapshot was created ...
 delete iter;
 db->ReleaseSnapshot(options.snapshot);
@@ -224,6 +238,8 @@ db->ReleaseSnapshot(options.snapshot);
 Note that when a snapshot is no longer needed, it should be released using the
 `DB::ReleaseSnapshot` interface. This allows the implementation to get rid of
 state that was being maintained just to support reading as of that snapshot.
+
+注意，当一个快照不再使用的时候，应该通过 `DB::ReleaseSnapshot` 接口进行释放。
 
 ## Slice
 
@@ -235,8 +251,12 @@ potentially large keys and values. In addition, leveldb methods do not return
 null-terminated C-style strings since leveldb keys and values are allowed to
 contain `'\0'` bytes.
 
+`it->key()` 和 `it->value()` 调用返回的值是 `leveldb::Slice` 类型的实例。切片是一个简单的数据结构，包含一个长度和一个只想外部字节数组的指针。返回一个切片比返回 `std::string` 更加高效，因为不需要隐式地拷贝大量的 keys 和 values。另外，leveldb 方法不返回空字符结尾的 C 风格地字符串，因为 leveldb 的 keys 和 values 允许包含 `\0` 字节。
+
 C++ strings and null-terminated C-style strings can be easily converted to a
 Slice:
+
+C++ 风格的 string 和 C 风格的空字符结尾的字符串很容易转换为一个切片：
 
 ```c++
 leveldb::Slice s1 = "hello";
@@ -247,6 +267,8 @@ leveldb::Slice s2 = str;
 
 A Slice can be easily converted back to a C++ string:
 
+一个切片也很容易转换回 C++ 风格的字符串：
+
 ```c++
 std::string str = s1.ToString();
 assert(str == std::string("hello"));
@@ -255,6 +277,8 @@ assert(str == std::string("hello"));
 Be careful when using Slices since it is up to the caller to ensure that the
 external byte array into which the Slice points remains live while the Slice is
 in use. For example, the following is buggy:
+
+注意，当使用切片时，调用者要确保它内部指针指向的外部字节数组保持存活。比如，下面的代码就有问题：
 
 ```c++
 leveldb::Slice slice;
@@ -268,6 +292,8 @@ Use(slice);
 When the if statement goes out of scope, str will be destroyed and the backing
 storage for slice will disappear.
 
+当 if 语句结束的时候，str 将会被销毁，切片的底层存储也随之消失了，就出问题了。
+
 ## Comparators
 
 The preceding examples used the default ordering function for key, which orders
@@ -275,6 +301,8 @@ bytes lexicographically. You can however supply a custom comparator when opening
 a database.  For example, suppose each database key consists of two numbers and
 we should sort by the first number, breaking ties by the second number. First,
 define a proper subclass of `leveldb::Comparator` that expresses these rules:
+
+前面的例子中用的都是默认的比较函数，即逐字节字典序比较函数。
 
 ```c++
 class TwoPartComparator : public leveldb::Comparator {
