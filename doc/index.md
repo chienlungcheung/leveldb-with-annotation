@@ -386,7 +386,7 @@ benefit in using blocks smaller than one kilobyte, or larger than a few
 megabytes. Also note that compression will be more effective with larger block
 sizes.
 
-leveldb 把相邻的 keys 组织在同一个 block 中，而且 block 是 leveldb 把数据从内存到转移到持久化存储和从持久化存储转移到内存的基本单位。默认的 block 大约为 4KB，压缩前。经常处理大块数据的应用可能希望把这个值调大，而针对数据做“点读”的应用可能希望这个值小一点，这样性能可能会更高一些。但是，没有证据表明该值小于 1KB 或者大于几个 MB 的时候性能会表现更好。同时要注意，针对大的 block size，进行压缩效率会更高。
+leveldb 把相邻的 keys 组织在同一个 block 中（具体见 [sstable 文件格式](table_format.md)），而且 block 是 leveldb 把数据从内存到转移到持久化存储和从持久化存储转移到内存的基本单位。默认的 block 大约为 4KB，压缩前。经常处理大块数据的应用可能希望把这个值调大，而针对数据做“点读”的应用可能希望这个值小一点，这样性能可能会更高一些。但是，没有证据表明该值小于 1KB 或者大于几个 MB 的时候性能会表现更好。同时要注意，针对大的 block size，进行压缩效率会更高。
 
 ### Compression
 
@@ -559,7 +559,7 @@ leveldb 将一个校验和与它存储在文件系统中的全部数据进行关
 verification of all data that is read from the file system on behalf of a
 particular read.  By default, no such verification is done.
 
-`ReadOptions::verify_checksums` 可以设置为 true 来强制核对从文件系统读取的全部数据的校验和。默认为 false。
+`ReadOptions::verify_checksums` 可以设置为 true 来强制核对从文件系统读取的全部数据的进行校验和检查。默认为 false。
 
 `Options::paranoid_checks` may be set to true before opening a database to make
 the database implementation raise an error as soon as it detects an internal
@@ -568,16 +568,20 @@ error may be raised when the database is opened, or later by another database
 operation. By default, paranoid checking is off so that the database can be used
 even if parts of its persistent storage have been corrupted.
 
-`Options::paranoid_checks` 
+`Options::paranoid_checks` 在数据库打开之前设置为 true 可以使得数据库一旦检测到数据损毁即报错。取决于数据库损坏部位，报错时机可能是打开数据库后的时候，也可能是在后续执行某个操作的时候。偏执检查默认是关闭状态，这样即使持久性存储部分虽坏数据库也能继续使用。
 
 If a database is corrupted (perhaps it cannot be opened when paranoid checking
 is turned on), the `leveldb::RepairDB` function may be used to recover as much
 of the data as possible
 
+如果数据库损坏了（当开启偏执检查的时候可能就打不开了），`leveldb::RepairDB` 函数可以用于对尽可能多的数据进行修复。
+
 ## Approximate Sizes
 
 The `GetApproximateSizes` method can used to get the approximate number of bytes
 of file system space used by one or more key ranges.
+
+`GetApproximateSizes` 方法用于后去一个或多个键区间占据的文件系统近似大小（单位，字节）。
 
 ```c++
 leveldb::Range ranges[2];
@@ -591,6 +595,8 @@ The preceding call will set `sizes[0]` to the approximate number of bytes of
 file system space used by the key range `[a..c)` and `sizes[1]` to the
 approximate number of bytes used by the key range `[x..z)`.
 
+上述代码结果是，`size[0]` 保存 `[a..c)` 键区间对应的文件系统字节数，`size[1]` 保存 `[x..z)` 键区间对应的文件系统字节数。
+
 ## Environment
 
 All file operations (and other operating system calls) issued by the leveldb
@@ -602,6 +608,7 @@ paths to limit the impact of leveldb on other activities in the system.
 由 leveldb 发起的全部文件操作以及其它的操作系统调用最后都会被路由给一个 `leveldb::Env` 对象。 用户也可以提供自己的 Env 实现以实现更好的控制。比如，如果应用程序想要针对 leveldb 的文件 IO 引入一个人工延迟以限制 leveldb 对同一个系统中其它应用的影响。
 
 ```c++
+// 定制自己的 Env 
 class SlowEnv : public leveldb::Env {
   ... implementation of the Env interface ...
 };
@@ -609,6 +616,7 @@ class SlowEnv : public leveldb::Env {
 SlowEnv env;
 leveldb::Options options;
 options.env = &env;
+// 用定制的 Env 打开数据库
 Status s = leveldb::DB::Open(options, ...);
 ```
 
@@ -621,10 +629,16 @@ implementations of the types/methods/functions exported by
 In addition, the new platform may need a new default `leveldb::Env`
 implementation.  See `leveldb/util/env_posix.h` for an example.
 
+如果针对特定平台提供 `leveldb/port/port.h` 导出的类型/方法/函数实现，那么 leveldb 可以被移植到该平台上，更多细节见 `leveldb/port/port_example.h`。
+
+另外，新平台可能还需要一个新的默认的 `leveldb::Env` 实现。具体可参考 `leveldb/util/env_posix.h` 实现。
+
 ## Other Information
 
 Details about the leveldb implementation may be found in the following
 documents:
+
+关于 leveldb 实现的更多细节请见下面的文档：
 
 1. [Implementation notes](impl.md)
 2. [Format of an immutable Table file](table_format.md)

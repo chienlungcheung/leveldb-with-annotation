@@ -131,7 +131,7 @@ The filter block is formatted as follows:
 The offset array at the end of the filter block allows efficient
 mapping from a data block offset to the corresponding filter.
 
-如果打开数据库的时候指定了一个 `FilterPolicy`，那么一个 filter block 就会被存储到每个 sstable 中。metaindex block 包含了一个 entry，它是从 `filter.<N>` 到 filter block 的 BlockHandle 的映射。其中，`<N>` 是一个由 filter policy 的 `Name()`方法返回的字符串。
+如果打开数据库的时候指定了一个 `FilterPolicy`，那么一个 filter block 就会被存储到每个 sstable 中。metaindex block 包含了一个 entry，它是从 `filter.<Name>` 到 filter block 的 BlockHandle 的映射。其中，`<Name>` 是一个由 filter policy 的 `Name()`方法返回的字符串。
 
 filter block 保存着一系列 filters，其中 filter i 包含了 `FilterPolicy::CreateFilter()` 针对入参 keys 的输出，这些 keys 保存在一个 block 中，该 block 对应的文件偏移量落在下面的范围里：
 

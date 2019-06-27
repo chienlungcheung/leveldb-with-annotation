@@ -81,7 +81,7 @@ log 文件内容是一系列 blocks，每个 block 大小为 32KB。唯一的例
 
 FULL 类型的 record 包含了一个完整的用户 record 的内容。
 
-FIRST、MIDDLE、LAST 这三个类型用于被分割成多个 fragments（典型地理由是某个 record 跨越了多个 block 边界） 的用户 record。FIRST 表示某个用户 record 的第一个 fragment，LAST 表示某个用户 record 的最后一个 fragment，MIDDLE 表示某个用户 record 的中间 fragments。
+FIRST、MIDDLE、LAST 这三个类型用于被分割成多个 fragments（典型的理由是某个 record 跨越了多个 block 边界） 的用户 record。FIRST 表示某个用户 record 的第一个 fragment，LAST 表示某个用户 record 的最后一个 fragment，MIDDLE 表示某个用户 record 的中间 fragments。
 
 举例：考虑下面一系列用户 records：
 

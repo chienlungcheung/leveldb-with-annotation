@@ -100,7 +100,7 @@ In the background:
 3. Delete the old log file and the old memtable.
 4. Add the new sstable to the young (level-0) level.
 
-当 level-0 的 log 文件大小超过某个值（默认 4MB）：
+当一个 log 文件大小超过某个值（默认 4MB）：
 
 就会创建一个全新的 memtable 和 log 文件，新的更新操作就会写到这里。
 
@@ -109,7 +109,7 @@ In the background:
 1. 将前一个 memtable 内容写到一个 sstable。
 2. 丢弃这个 memtable。
 3. 删除老的 log 文件和老的 memtable。
-4. 新增一个 sstable 到 leve-0。
+4. 把新生成的 sstable 放到到 level-0。
 
 ## Compactions 压实
 
@@ -150,7 +150,7 @@ current key.
 
 针对某一个 level 的压实会循环整个键空间。具体来讲，针对 level L，我们会记住 level L 上次压实的最后一个 key。针对 level L 的下次压实将会挑选从这个 key 之后开始的第一个文件进行。（如果不存在这样的文件，那么就会遍历回键空间起始 key）。
 
-压实会丢弃某个 key 对应的被覆盖过的 values（只保留最新的那个 value），也会在没有更高的 level 包含某 key 的时候丢弃这个 key 的删除标记。
+压实会丢弃某个 key 对应的被覆盖过的 values（只保留最新的那个 value），也会在没有更高的 level 包含该 key 的时候丢弃这个 key 的删除标记。
 
 ### Timing 压实时间消耗
 
@@ -183,17 +183,17 @@ Solution 3: We work on reducing the cost of very wide merges. Perhaps most of
 the level-0 files will have their blocks sitting uncompressed in the cache and
 we will only need to worry about the O(N) complexity in the merging iterator.
 
-Level-0 压实将会从 level-0 读取高达 4 个 1MB 文件，最坏情况下同时会把 level-1 全部 10MB 文件都读进来。也就是说，这种情况下我们会读取 14MB 写入 14MB。
+Level-0 压实将会从 level-0 读取 4 个 1MB 文件，最坏情况下同时会把 level-1 全部 10MB 文件都读进来。也就是说，这种情况下我们会读取 14MB 写入 14MB。
 
 除了特殊的 level-0 压实过程，我们会从 level L 选取一个 2MB 大小的文件。最坏情况下，这会与 level L+1 层大约 12 个文件发生重叠（其中 10 个是因为 level-(L+1) 大小是 level-L 的十倍，另外 2 个（作为前面提到的 10 个文件前后的边界文件）是因为 level-L 的文件区间通常不与 level-(L+1) 对齐）。因此压实会读取 26MB 写入 26MB。假设磁盘 IO 速度为 100MB/s（现代的磁盘驱动大约就这速度），最坏情况下的压实将会消耗大约 0.5 秒（读写共 52MB，读或者写都需要寻道，两个操作是串行的）。
 
-假如我们把后台写入速度限制到一个比较小的值，比如全速 100MB/s 的 10%，一次压实大约消耗 5 秒。如果用户正在以 100MB/s 的速度写磁盘，我们可能需要构建大量的 level-0 文件（大约 50 个文件来保存 5*10MB 数据）。这会显著增加读操作时间消耗，因为每次读都需要合并更多的文件。（？）
+假如我们把后台写入速度限制到一个比较小的值，比如全速 100MB/s 的 10%，一次压实大约消耗 5 秒。如果用户以 10MB/s 的速度写磁盘，我们可能会生成大量的 level-0 文件（写得慢，合并就慢，就会导致 level-0 文件变多）（大约 50 个文件来保存 5*10MB 数据）。这会显著增加读操作时间消耗，因为每次读都需要合并更多的文件。（？）
 
-解决方案 1：为了减轻这个问题的影响，我们可能会想要在 level-0 文件个数太大的时候增加 log 文件的切换阈值。但这么做的缺点是，这个阈值越大，我们需要更多的内存来维持对应的 memtable。
+解决方案 1：为了缓解这个问题的影响，我们可能会想要在 level-0 文件太多的时候增加 log 文件的切换阈值。但这么做的缺点是，这个阈值越大，我们需要更多的内存来维持对应的 memtable。
 
 解决方案 2：我们可能想要在 level-0 文件个数蹿升时人工减小写入速度。
 
-解决方案 3：我们设法减少大范围合并的消耗。可能大多数 level-0 文件对应的块在缓存中处于未压缩状态，我们只需操心合并时的 O(N) 复杂度的遍历。
+解决方案 3：我们设法减少大范围合并的消耗。可能大多数 level-0 文件对应的块在缓存中处于未压缩状态，我们只需操心合并时的 O(N) 复杂度。
 
 ### Number of files 文件个数的影响
 
@@ -216,15 +216,15 @@ So maybe even the sharding is not necessary on modern filesystems?
 
 不再总是构造大小为 2MB 大小的文件，我们可以为更高的 level 构造更大的文件以减少总的文件个数，虽然这样会导致更高的压实成本。或者，我们可以将同一组文件分片到多个目录中。
 
-2011 年 2 月 4 号，我们在一个 ext3 文件系统上做了针对不同数目的文件打开十万次的时间消耗测试：
+2011 年 2 月 4 号，我们在一个 ext3 文件系统上做了针对包含不同文件个数的目录打开十万次文件的时间消耗测试：
 
-|目录中的文件数         | 打开一个文件的微妙数          |
+|目录中的文件数         | 打开一个文件的微秒数          |
 |-------------------:|----------------------------:|
 |               1000 |                           9 |
 |              10000 |                          10 |
 |             100000 |                          16 |
 
-测试结果显示，在现代文件系统上，分片可能不是必须的。
+测试结果显示差别不太大，在现代文件系统上，将文件分片到更多目录可能不是必须的。
 
 ## Recovery
 
@@ -238,9 +238,9 @@ So maybe even the sharding is not necessary on modern filesystems?
 - 读取 CURRENT 文件找到最新提交的 MANIFEST 文件的名称
 - 读取该 MANIFEST 文件内容
 - 删除过期的文件
-- 这一步我们可以打开全部 sstables，但最好延迟一会
-- 将 log 文件转换为一个新的 level-0 sstable
-- 将接下来的写操作将会写入这个待恢复序列号的新 log 文件
+- 这一步我们可以打开全部 sstables，但最好先不干
+- 将 log 文件块转换为一个新的 level-0 sstable
+- 将接下来的要写的数据写入一个新的 log 文件
 
 ## Garbage collection of files
 
@@ -249,4 +249,4 @@ of recovery. It finds the names of all files in the database. It deletes all log
 files that are not the current log file. It deletes all table files that are not
 referenced from some level and are not the output of an active compaction.
 
-每次压实结束或者恢复结束 `DeleteObsoleteFiles()` 方法就会被调用。该方法会找到数据库中的全部文件的名称。它会删除全部的非当前 log 文件，也会删除全部 table 文件（这些文件不再被任何 level 引用且不是某个正在进行的压实过程的输出文件）。
+每次压实结束或者恢复结束 `DeleteObsoleteFiles()` 方法就会被调用。该方法会找到数据库中的全部文件的名称。它会删除全部的非当前 log 文件，也会删除全部无效的 table 文件（这些 table 文件不再被任何 level 引用且不是某个正在进行的压实过程的输出文件）。
