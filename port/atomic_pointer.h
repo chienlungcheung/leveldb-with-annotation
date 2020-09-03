@@ -16,15 +16,15 @@
 // http://code.google.com/p/google-perftools/source/browse/#svn%2Ftrunk%2Fsrc%2Fbase
 
 /**
- * AtomicPointer 用来实现无锁指针。
+ * AtomicPointer 用来实现无锁指针. 
  *
  * 依赖于具体平台的 AtomicPointer 实现如下：
  *
- * - 如果平台提供了方便的内存屏障，我们就直接使用原始指针
- * - 如果 <atomic> 头文件存在（在新版的 gcc 中就有），我们使用基于 <atomic> 的 AtomicPointer。但
- *   是我们更倾向于使用基于内存屏障的版本，因为至少在 gcc 4.4 32-bit linux 版本里面我们发现 <atomic> 有 bug。
- *   同时，我们也发现一些 <atomic> 实现在性能上不如基于内存屏障的版本（比如基于 <atomic> 的 acquire-load 实现
- *   耗时大约 16 纳秒，而基于内存屏障的 acquire-load 实现耗时只需要大约 1 纳秒）。
+ * - 如果平台提供了方便的内存屏障, 我们就直接使用原始指针
+ * - 如果 <atomic> 头文件存在(在新版的 gcc 中就有), 我们使用基于 <atomic> 的 AtomicPointer. 但
+ *   是我们更倾向于使用基于内存屏障的版本, 因为至少在 gcc 4.4 32-bit linux 版本里面我们发现 <atomic> 有 bug. 
+ *   同时, 我们也发现一些 <atomic> 实现在性能上不如基于内存屏障的版本(比如基于 <atomic> 的 acquire-load 实现
+ *   耗时大约 16 纳秒, 而基于内存屏障的 acquire-load 实现耗时只需要大约 1 纳秒). 
  */
 #ifndef PORT_ATOMIC_POINTER_H_
 #define PORT_ATOMIC_POINTER_H_
@@ -54,15 +54,15 @@
 namespace leveldb {
 namespace port {
 /**
- * 注意这两个宏定义 ARCH_CPU_X86_FAMILY 与 __GNUC__，在 x86-64 架构且有 GCC，则会使用平台提供的内存屏障，
- * 即使有 <atomic>。如果前述两个宏被定义，则会定义 LEVELDB_HAVE_MEMORY_BARRIER 宏，则最后的  AtomicPointer 实现
- * 就是基于平台内存屏障而非 C++11 提供的 <atomic>。
+ * 注意这两个宏定义 ARCH_CPU_X86_FAMILY 与 __GNUC__, 在 x86-64 架构且有 GCC, 则会使用平台提供的内存屏障, 
+ * 即使有 <atomic>. 如果前述两个宏被定义, 则会定义 LEVELDB_HAVE_MEMORY_BARRIER 宏, 则最后的  AtomicPointer 实现
+ * 就是基于平台内存屏障而非 C++11 提供的 <atomic>. 
  *
- * 具体实现为 __asm__ __volatile__("" : : : "memory")，就这一行代码。
+ * 具体实现为 __asm__ __volatile__("" : : : "memory"), 就这一行代码. 
  *
  * 具体原理请见 http://gcc.gnu.org/ml/gcc/2003-04/msg01180.html 以及 http://en.wikipedia.org/wiki/Memory_ordering
  *
- * 内存屏障的意义就是阻止编译器对内存屏障前后的代码进行重排，确保屏障前的 stores 肯定能被屏障后的 loads 看到。
+ * 内存屏障的意义就是阻止编译器对内存屏障前后的代码进行重排, 确保屏障前的 stores 肯定能被屏障后的 loads 看到. 
  */
 // Define MemoryBarrier() if available
 // Windows on x86
@@ -142,18 +142,18 @@ inline void MemoryBarrier() {
 // AtomicPointer built using platform-specific MemoryBarrier().
 #if defined(LEVELDB_HAVE_MEMORY_BARRIER)
 /**
- * 此处实现使用的是平台相关的内存屏障。
- * 注意，__asm__ __volatile__("" : : : "memory"); 除了作为内存屏障阻止编译器将屏障前后操作重排序，
- * 它还有一个副作用，就是将当前 cpu/core 上寄存器内容全部失效，具体为：
- * - 它会强制代码生成器将屏障插入位置之前在全部 cpu/core 上发生的全部 stores 操作从寄存器刷新到内存中（这可以确保其它 cpu/core 对内存的修改都生效）；
- * - 另外还有一个副作用就是令编译器假设内存已经发生改变，当前 cpu/core 寄存器里的内容都失效了（这可以强制屏障后用到的变量必须去内存读取最新值）。
- * （It forces the code generator to emit all the stores for data that's currently in registers
+ * 此处实现使用的是平台相关的内存屏障. 
+ * 注意, __asm__ __volatile__("" : : : "memory"); 除了作为内存屏障阻止编译器将屏障前后操作重排序, 
+ * 它还有一个副作用, 就是将当前 cpu/core 上寄存器内容全部失效, 具体为：
+ * - 它会强制代码生成器将屏障插入位置之前在全部 cpu/core 上发生的全部 stores 操作从寄存器刷新到内存中(这可以确保其它 cpu/core 对内存的修改都生效); 
+ * - 另外还有一个副作用就是令编译器假设内存已经发生改变, 当前 cpu/core 寄存器里的内容都失效了(这可以强制屏障后用到的变量必须去内存读取最新值). 
+ * (It forces the code generator to emit all the stores for data that's currently in registers
  *   but needs to go to variables. But it also (as documented) causes the compiler to assume
- *   that memory has changed since then, i.e., anything it loaded before is no longer valid.）
+ *   that memory has changed since then, i.e., anything it loaded before is no longer valid.)
  */
 class AtomicPointer {
  private:
-  void* rep_; // 虽然看起来是个指针，但实际上它就是要互斥访问的值。
+  void* rep_; // 虽然看起来是个指针, 但实际上它就是要互斥访问的值. 
  public:
   AtomicPointer() { }
   explicit AtomicPointer(void* p) : rep_(p) {}
@@ -161,18 +161,18 @@ class AtomicPointer {
   inline void NoBarrier_Store(void* v) { rep_ = v; }
   inline void* Acquire_Load() const {
     void* result = rep_;
-    // 确保对 result 的 store （即 result = rep_ 分为 load rep_->mov rep_, result ->store result 三个阶段）
-    // 发生在 result 的 load 之前（即 return result 分为两个阶段 result load->赋值给外面变量），
-    // 这样可以确保 Acquire_Load() 调用后返回的是内存中最新的值，实现了当前 cpu/core 看到其它 cpu/core 对该值的修改，
-    // 从而确保了各个 cpu/core 缓存一致性。
+    // 确保对 result 的 store (即 result = rep_ 分为 load rep_->mov rep_, result ->store result 三个阶段)
+    // 发生在 result 的 load 之前(即 return result 分为两个阶段 result load->赋值给外面变量), 
+    // 这样可以确保 Acquire_Load() 调用后返回的是内存中最新的值, 实现了当前 cpu/core 看到其它 cpu/core 对该值的修改, 
+    // 从而确保了各个 cpu/core 缓存一致性. 
     MemoryBarrier();
     return result;
   }
   inline void Release_Store(void* v) {
-    // 确保对 v 的 load （传参有赋值行为，需要 load）发生在 rep_ 的 store 之前，
-    // 这样可以确保把最新的 v 存储到 rep_ 所在的内存位置，
+    // 确保对 v 的 load (传参有赋值行为, 需要 load)发生在 rep_ 的 store 之前, 
+    // 这样可以确保把最新的 v 存储到 rep_ 所在的内存位置, 
     // 实现了修改可以被其它 cpu/core 看到,
-    // 从而确保了各个 cpu/core 缓存一致性。
+    // 从而确保了各个 cpu/core 缓存一致性. 
     MemoryBarrier();
     rep_ = v;
   }
@@ -196,10 +196,10 @@ class AtomicPointer {
     rep_.store(v, std::memory_order_release); // 确保操作的原子性和对其它 cpu/core 的可见性
   }
   inline void* NoBarrier_Load() const {
-    return rep_.load(std::memory_order_relaxed); // 确保操作的原子性，但不确保对其它 cpu/core 的可见性
+    return rep_.load(std::memory_order_relaxed); // 确保操作的原子性, 但不确保对其它 cpu/core 的可见性
   }
   inline void NoBarrier_Store(void* v) {
-    rep_.store(v, std::memory_order_relaxed); // 确保操作的原子性，但不确保对其它 cpu/core 的可见性
+    rep_.store(v, std::memory_order_relaxed); // 确保操作的原子性, 但不确保对其它 cpu/core 的可见性
   }
 };
 

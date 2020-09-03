@@ -12,8 +12,8 @@ namespace leveldb {
 // Tag numbers for serialized VersionEdit.  These numbers are written to
 // disk and should not be changed.
 //
-// 用于序列化 VersionEdit 的 tag number。
-// 这些数字会被写入磁盘，所以不要修改他们，否则反序列化就对不上了。
+// 用于序列化 VersionEdit 的 tag number. 
+// 这些数字会被写入磁盘, 所以不要修改他们, 否则反序列化就对不上了. 
 enum Tag {
   kComparator           = 1,
   kLogNumber            = 2,
@@ -101,7 +101,7 @@ static bool GetInternalKey(Slice* input, InternalKey* dst) {
   }
 }
 
-// 在 GetVarint32 基础上加了个判断，防止 level 超出范围
+// 在 GetVarint32 基础上加了个判断, 防止 level 超出范围
 static bool GetLevel(Slice* input, int* level) {
   uint32_t v;
   if (GetVarint32(input, &v) &&

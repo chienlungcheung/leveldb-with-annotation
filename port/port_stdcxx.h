@@ -68,7 +68,7 @@ class LOCKABLE Mutex {
 
 // Thinly wraps std::condition_variable.
 /**
- * 该类为对标准库 std::condition_variable 的简单封装。
+ * 该类为对标准库 std::condition_variable 的简单封装. 
  */
 class CondVar {
  public:
@@ -83,7 +83,7 @@ class CondVar {
   CondVar& operator=(const CondVar&) = delete; // 也不能赋值
 
   void Wait() {
-    // unique_lock 控制锁在某个区域的所有权，而且具备移动语义，具体见 release 方法
+    // unique_lock 控制锁在某个区域的所有权, 而且具备移动语义, 具体见 release 方法
     std::unique_lock<std::mutex> lock(mu_->mu_, std::adopt_lock);
     cv_.wait(lock);
     lock.release();

@@ -29,7 +29,7 @@
 //Footer 格式：
 //metaindex_handle: char[p];     // 指向上面 [metaindex block] 的 BlockHandle
 //index_handle:     char[q];     // 指向上面 [index block] 的 BlockHandle
-//padding:          char[40-p-q];// 两个 BlockHandle 最大 40 字节，不足则补零凑够 40 字节
+//padding:          char[40-p-q];// 两个 BlockHandle 最大 40 字节, 不足则补零凑够 40 字节
 //magic:            fixed64;     // == 0xdb4775248b80fb57 (little-endian)
 namespace leveldb {
 
@@ -39,8 +39,8 @@ struct ReadOptions;
 
 // BlockHandle is a pointer to the extent of a file that stores a data
 // block or a meta block.
-// 一个 BlockHandle 是一个指针，它指向一个文件的范围，该文件存储着 data block 或者 meta block。
-// 它包括两部分：offset 和 size，分别表示所指向的 block 在文件中的偏移量和大小。
+// 一个 BlockHandle 是一个指针, 它指向一个文件的范围, 该文件存储着 data block 或者 meta block. 
+// 它包括两部分：offset 和 size, 分别表示所指向的 block 在文件中的偏移量和大小. 
 class BlockHandle {
  public:
   BlockHandle();
@@ -59,7 +59,7 @@ class BlockHandle {
   Status DecodeFrom(Slice* input);
 
   // Maximum encoding length of a BlockHandle
-  // 一个 BlockHandle 编码后最大长度（varint64 最多需要 10 个字节存储）
+  // 一个 BlockHandle 编码后最大长度(varint64 最多需要 10 个字节存储)
   enum { kMaxEncodedLength = 10 + 10 };
 
  private:
@@ -70,10 +70,10 @@ class BlockHandle {
 // Footer encapsulates the fixed information stored at the tail
 // end of every table file.
 //
-// Footer 封装一个固定长度的信息，它位于每个 table 文件的末尾。
+// Footer 封装一个固定长度的信息, 它位于每个 table 文件的末尾. 
 //
-// 在每个 sstable 文件的末尾是一个固定长度的 footer，它包含了一个指向 metaindex block 的 BlockHandle
-// 和一个指向 index block 的 BlockHandle 以及一个 magic number。
+// 在每个 sstable 文件的末尾是一个固定长度的 footer, 它包含了一个指向 metaindex block 的 BlockHandle
+// 和一个指向 index block 的 BlockHandle 以及一个 magic number. 
 class Footer {
  public:
   Footer() { }
@@ -101,10 +101,10 @@ class Footer {
   // Footer will always occupy exactly this many bytes.  It consists
   // of two block handles and a magic number.
   //
-  // Footer 长度编码后的长度。注意，它就固定这么长。
-  // Footer 包含了一个 metaindex_handle、一个 index_handle、以及一个魔数。
+  // Footer 长度编码后的长度. 注意, 它就固定这么长. 
+  // Footer 包含了一个 metaindex_handle、一个 index_handle、以及一个魔数. 
   enum {
-    kEncodedLength = 2*BlockHandle::kMaxEncodedLength + 8 // Footer 长度，两个 BlockHandle 最大长度 + 固定的 8 字节魔数
+    kEncodedLength = 2*BlockHandle::kMaxEncodedLength + 8 // Footer 长度, 两个 BlockHandle 最大长度 + 固定的 8 字节魔数
   };
 
  private:
@@ -116,14 +116,14 @@ class Footer {
 //    echo http://code.google.com/p/leveldb/ | sha1sum
 // and taking the leading 64 bits.
 //
-// Footer 的魔数通过运行命令 'echo http://code.google.com/p/leveldb/ | sha1sum' 获得，
-// 并且存在 Footer 的前 64 位。
+// Footer 的魔数通过运行命令 'echo http://code.google.com/p/leveldb/ | sha1sum' 获得, 
+// 并且存在 Footer 的前 64 位. 
 static const uint64_t kTableMagicNumber = 0xdb4775248b80fb57ull;
 
 // 1-byte type + 32-bit crc
 //
-// 每个 block 的 trailer 由两部分构成：1 字节的 type（对应 block 的压缩类型），和 32 位的 crc。
-// 共 5 字节。
+// 每个 block 的 trailer 由两部分构成：1 字节的 type(对应 block 的压缩类型), 和 32 位的 crc. 
+// 共 5 字节. 
 static const size_t kBlockTrailerSize = 5;
 
 struct BlockContents {
@@ -135,9 +135,9 @@ struct BlockContents {
 // Read the block identified by "handle" from "file".  On failure
 // return non-OK.  On success fill *result and return OK.
 //
-// 根据 options 从 file 中读取由 handle 指向的 block 并存储到 result 中。
-// 失败返回 non-OK；
-// 成功则将数据填充到 *result 并返回 OK。
+// 根据 options 从 file 中读取由 handle 指向的 block 并存储到 result 中. 
+// 失败返回 non-OK; 
+// 成功则将数据填充到 *result 并返回 OK. 
 Status ReadBlock(RandomAccessFile* file,
                  const ReadOptions& options,
                  const BlockHandle& handle,

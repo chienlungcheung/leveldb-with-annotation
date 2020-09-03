@@ -12,10 +12,10 @@
 // Version,VersionSet are thread-compatible, but require external
 // synchronization on all accesses.
 //
-// 一个 DBImpl 的表示由一组 Versions 构成。
-// 最新的 version 叫做 "current"。较老的 versions 可能也会被保留以为活跃的迭代器提供一致性视图。
-// 每个 Version 跟踪每一个 level 的一组 Table 文件。全部 versions 集合由 VersionSet 维护。
-// Version，VersionSet 都是兼容线程的，但是在访问的时候需要外部的同步设施。
+// 一个 DBImpl 的表示由一组 Versions 构成. 
+// 最新的 version 叫做 "current". 较老的 versions 可能也会被保留以为活跃的迭代器提供一致性视图. 
+// 每个 Version 跟踪每一个 level 的一组 Table 文件. 全部 versions 集合由 VersionSet 维护. 
+// Version, VersionSet 都是兼容线程的, 但是在访问的时候需要外部的同步设施. 
 #ifndef STORAGE_LEVELDB_DB_VERSION_SET_H_
 #define STORAGE_LEVELDB_DB_VERSION_SET_H_
 
@@ -44,9 +44,9 @@ class WritableFile;
 // Return files.size() if there is no such file.
 // REQUIRES: "files" contains a sorted list of non-overlapping files.
 //
-// 返回满足条件 files[i]->largest >= key 的最小索引 i；如果不存在则返回 files 列表长度。
-// 通过二分法在 files 里查找。
-// 要求：files 必须包含一组有序的且无重叠的文件（除了 level-0，其它 levels 的文件列表均满足该条件）。
+// 返回满足条件 files[i]->largest >= key 的最小索引 i; 如果不存在则返回 files 列表长度. 
+// 通过二分法在 files 里查找. 
+// 要求：files 必须包含一组有序的且无重叠的文件(除了 level-0, 其它 levels 的文件列表均满足该条件). 
 int FindFile(const InternalKeyComparator& icmp,
              const std::vector<FileMetaData*>& files,
              const Slice& key);
@@ -57,53 +57,53 @@ int FindFile(const InternalKeyComparator& icmp,
 // largest==nullptr represents a key largest than all keys in the DB.
 // REQUIRES: If disjoint_sorted_files, files[] contains disjoint ranges
 //           in sorted order.
-// 检查 files 中是否存在文件与区间 [*smallest,*largest] 重叠。
-// 当且仅当 files 中某个文件与参数 [*smallest,*largest] 指定的 user key 区间重叠返回 true。
-// smallest==nullptr 表示小于 DB 中全部 keys 的 key。
-// largest==nullptr 表示大于 DB 中全部 keys 的 key。
-// 要求：如果 disjoint_sorted_files 为 true，files[] 包含的区间不相交且有序。
+// 检查 files 中是否存在文件与区间 [*smallest,*largest] 重叠. 
+// 当且仅当 files 中某个文件与参数 [*smallest,*largest] 指定的 user key 区间重叠返回 true. 
+// smallest==nullptr 表示小于 DB 中全部 keys 的 key. 
+// largest==nullptr 表示大于 DB 中全部 keys 的 key. 
+// 要求：如果 disjoint_sorted_files 为 true, files[] 包含的区间不相交且有序. 
 bool SomeFileOverlapsRange(const InternalKeyComparator& icmp,
                            bool disjoint_sorted_files,
                            const std::vector<FileMetaData*>& files,
                            const Slice* smallest_user_key,
                            const Slice* largest_user_key);
 
-// 一个 DBImpl 的表示由一组 Versions 构成。
-// 每个 Version 都保存着 db 每个 level 的文件元数据链表，
-// 核心数据成员为 std::vector<FileMetaData*> files_[config::kNumLevels]。
-// （一个 Version 对应一个 DBImpl 快照。）
+// 一个 DBImpl 的表示由一组 Versions 构成. 
+// 每个 Version 都保存着 db 每个 level 的文件元数据链表, 
+// 核心数据成员为 std::vector<FileMetaData*> files_[config::kNumLevels]. 
+// (一个 Version 对应一个 DBImpl 快照. )
 class Version {
  public:
   // Append to *iters a sequence of iterators that will
   // yield the contents of this Version when merged together.
   // REQUIRES: This version has been saved (see VersionSet::SaveTo)
   //
-  // 将一系列迭代器追加到 iters 向量里，这些迭代器在被合并后会生成该版本的内容。
-  // 前提：当前 Version 对象事先已经通过 VersionSet::SaveTo 方法被保存过了。
+  // 将一系列迭代器追加到 iters 向量里, 这些迭代器在被合并后会生成该版本的内容. 
+  // 前提：当前 Version 对象事先已经通过 VersionSet::SaveTo 方法被保存过了. 
   void AddIterators(const ReadOptions&, std::vector<Iterator*>* iters);
 
   // Lookup the value for key.  If found, store it in *val and
   // return OK.  Else return a non-OK status.  Fills *stats.
   // REQUIRES: lock is not held
-  // 该结构体服务于下面的 Get 方法。
+  // 该结构体服务于下面的 Get 方法. 
   struct GetStats {
     FileMetaData* seek_file;
     int seek_file_level;
   };
-  // 结构体 GetStats 服务于下面紧接着的 Get 方法。
-  // 从 level-0 开始一层一层查找 key 对应的 value。
-  // 当查询一个 key 时，如果找到了对应的 value，则将 value 保存到 *val 指向的地址并且返回 OK；
-  // 否则，返回一个  non-OK。
-  // 前提： 调用该方法之前必须未持有锁。todo 这个前提不知道是不是写错了。
+  // 结构体 GetStats 服务于下面紧接着的 Get 方法. 
+  // 从 level-0 开始一层一层查找 key 对应的 value. 
+  // 当查询一个 key 时, 如果找到了对应的 value, 则将 value 保存到 *val 指向的地址并且返回 OK; 
+  // 否则, 返回一个  non-OK. 
+  // 前提： 调用该方法之前必须未持有锁. todo 这个前提不知道是不是写错了. 
   Status Get(const ReadOptions&, const LookupKey& key, std::string* val,
              GetStats* stats);
 
   // Adds "stats" into the current state.  Returns true if a new
   // compaction may need to be triggered, false otherwise.
   // REQUIRES: lock is held
-  // 与压实有关。todo 为啥这么干不清楚，看用法是调用完了 Get 后调用 UpdateStats.
-  // 将 stats 增加到当前状态中。如果需要触发一个压实，则返回 true；否则返回 false。
-  // 前提：调用该方法前必须已经持有锁。
+  // 与压实有关. todo 为啥这么干不清楚, 看用法是调用完了 Get 后调用 UpdateStats.
+  // 将 stats 增加到当前状态中. 如果需要触发一个压实, 则返回 true; 否则返回 false. 
+  // 前提：调用该方法前必须已经持有锁. 
   bool UpdateStats(const GetStats& stats);
 
   // Record a sample of bytes read at the specified internal key.
@@ -111,11 +111,11 @@ class Version {
   // bytes.  Returns true if a new compaction may need to be triggered.
   // REQUIRES: lock is held
   //
-  // 看了该方法实现发现上面的英文注释有点莫名其妙。
-  // 该方法就是从 level-0 开始检查有多少个文件的范围与 key 重叠，
-  // 如果有多于两个就会设置触发压实的标记，并且在检查过程中会记录第一个与 key 重叠的文件及其 level。
-  // 如果需要触发一次新的压实，则返回 true，否则返回 false。
-  // 前提：调用该方法前必须已经持有锁。
+  // 看了该方法实现发现上面的英文注释有点莫名其妙. 
+  // 该方法就是从 level-0 开始检查有多少个文件的范围与 key 重叠, 
+  // 如果有多于两个就会设置触发压实的标记, 并且在检查过程中会记录第一个与 key 重叠的文件及其 level. 
+  // 如果需要触发一次新的压实, 则返回 true, 否则返回 false. 
+  // 前提：调用该方法前必须已经持有锁. 
   bool RecordReadSample(Slice key);
 
   // Reference count management (so Versions do not disappear out from
@@ -134,11 +134,11 @@ class Version {
   // some part of [*smallest_user_key,*largest_user_key].
   // smallest_user_key==nullptr represents a key smaller than all the DB's keys.
   // largest_user_key==nullptr represents a key largest than all the DB's keys.
-  // 检查指定的 level 是否与 [*smallest, *largest] 区间相交。
-  // 当且仅当指定 level 的某个文件与 [*smallest, *largest] 指定的 user key 区间重叠返回 true；
-  // 意思是 [*smallest, *largest] 与指定的 level 有重叠。
-  // smallest==nullptr 表示小于 DB 中全部 keys 的 key。
-  // largest==nullptr 表示大于 DB 中全部 keys 的 key。
+  // 检查指定的 level 是否与 [*smallest, *largest] 区间相交. 
+  // 当且仅当指定 level 的某个文件与 [*smallest, *largest] 指定的 user key 区间重叠返回 true; 
+  // 意思是 [*smallest, *largest] 与指定的 level 有重叠. 
+  // smallest==nullptr 表示小于 DB 中全部 keys 的 key. 
+  // largest==nullptr 表示大于 DB 中全部 keys 的 key. 
   bool OverlapInLevel(int level,
                       const Slice* smallest_user_key,
                       const Slice* largest_user_key);
@@ -146,10 +146,10 @@ class Version {
   // Return the level at which we should place a new memtable compaction
   // result that covers the range [smallest_user_key,largest_user_key].
   //
-  // 一个 memtable 对应一个 [smallest_user_key,largest_user_key] 区间，
-  // 我们将该 memtable 构造成一个 Table 文件后，需要为该文件寻找一个落脚的 level。
-  // 该方法所作的即是依据与区间 [smallest_user_key,largest_user_key] 的重叠情况获取可以存储对应 Table 文件的 level。
-  // 具体选取过错与压实策略有关。
+  // 一个 memtable 对应一个 [smallest_user_key,largest_user_key] 区间, 
+  // 我们将该 memtable 构造成一个 Table 文件后, 需要为该文件寻找一个落脚的 level. 
+  // 该方法所作的即是依据与区间 [smallest_user_key,largest_user_key] 的重叠情况获取可以存储对应 Table 文件的 level. 
+  // 具体选取过错与压实策略有关. 
   int PickLevelForMemTableOutput(const Slice& smallest_user_key,
                                  const Slice& largest_user_key);
 
@@ -157,8 +157,8 @@ class Version {
   int NumFiles(int level) const { return files_[level].size(); }
 
   // Return a human readable string that describes this version's contents.
-  // 返回一个对人类友好的描述该 version 内容的字符串，具体内容为每个 level 的全部文件的
-  // 相关信息，这些信息包含每个文件的号码、文件大小、起止 key。
+  // 返回一个对人类友好的描述该 version 内容的字符串, 具体内容为每个 level 的全部文件的
+  // 相关信息, 这些信息包含每个文件的号码、文件大小、起止 key. 
   std::string DebugString() const;
 
  private:
@@ -174,9 +174,9 @@ class Version {
   //
   // REQUIRES: user portion of internal_key == user_key.
   //
-  // 从 level-0 开始，level-by-level 的针对与 user_key 重叠的每个文件
-  // 按从最新到最老的顺序依次调用 func(arg, level, f)。
-  // 针对 func 的调用失败一次即停止后续调用。
+  // 从 level-0 开始, level-by-level 的针对与 user_key 重叠的每个文件
+  // 按从最新到最老的顺序依次调用 func(arg, level, f). 
+  // 针对 func 的调用失败一次即停止后续调用. 
   // 前提：internal_key 的 user key 部分 == user_key
   void ForEachOverlapping(Slice user_key, Slice internal_key,
                           void* arg,
@@ -203,9 +203,9 @@ class Version {
   // Level that should be compacted next and its compaction score.
   // Score < 1 means compaction is not strictly needed.  These fields
   // are initialized by Finalize().
-  // 压实分数，小于 1 意味着压实不是很需要。由 Finalize() 初始化。
+  // 压实分数, 小于 1 意味着压实不是很需要. 由 Finalize() 初始化. 
   double compaction_score_;
-  // 即将被压缩的 level 。由 Finalize() 初始化。
+  // 即将被压缩的 level . 由 Finalize() 初始化. 
   int compaction_level_;
 
   explicit Version(VersionSet* vset)
@@ -223,11 +223,11 @@ class Version {
   void operator=(const Version&);
 };
 
-// 一个 DBImpl 由一组 Versions 构成。
-// 最新的 version 叫做 "current"，较老的 versions 可能也会被保留以为活跃的迭代器提供一致性视图。
-// 每个 Version 跟踪每一个 level 的一组 Table 文件。
-// 全部 versions 集合由 VersionSet 维护。
-// Version，VersionSet 都是兼容线程的，但是在访问的时候需要外部的同步设施。
+// 一个 DBImpl 由一组 Versions 构成. 
+// 最新的 version 叫做 "current", 较老的 versions 可能也会被保留以为活跃的迭代器提供一致性视图. 
+// 每个 Version 跟踪每一个 level 的一组 Table 文件. 
+// 全部 versions 集合由 VersionSet 维护. 
+// Version, VersionSet 都是兼容线程的, 但是在访问的时候需要外部的同步设施. 
 class VersionSet {
  public:
   VersionSet(const std::string& dbname,
@@ -242,9 +242,9 @@ class VersionSet {
   // REQUIRES: *mu is held on entry.
   // REQUIRES: no other thread concurrently calls LogAndApply()
   //
-  // 将 *edit 内容施用到当前 version 来构成一个新的描述符，这个描述符会被持久化保存同时会被作为新的当前 version 进行安装。
-  // 前提：*mu 在进入方法之前就被持有了。
-  // 前提：没有其它线程并发调用该方法。
+  // 将 *edit 内容施用到当前 version 来构成一个新的描述符, 这个描述符会被持久化保存同时会被作为新的当前 version 进行安装. 
+  // 前提：*mu 在进入方法之前就被持有了. 
+  // 前提：没有其它线程并发调用该方法. 
   Status LogAndApply(VersionEdit* edit, port::Mutex* mu)
       EXCLUSIVE_LOCKS_REQUIRED(mu);
 
@@ -267,7 +267,7 @@ class VersionSet {
   // already been allocated.
   // REQUIRES: "file_number" was returned by a call to NewFileNumber().
   //
-  // 除非已经分配了一个新的文件 number，否则重用参数中的 file_number
+  // 除非已经分配了一个新的文件 number, 否则重用参数中的 file_number
   void ReuseFileNumber(uint64_t file_number) {
     if (next_file_number_ == file_number + 1) {
       next_file_number_ = file_number;
@@ -296,7 +296,7 @@ class VersionSet {
 
   // Set the last sequence number to s.
   //
-  // 将上个序列号设置为 s，注意 s 必须大于等于上个序列号
+  // 将上个序列号设置为 s, 注意 s 必须大于等于上个序列号
   void SetLastSequence(uint64_t s) {
     assert(s >= last_sequence_);
     last_sequence_ = s;
@@ -315,7 +315,7 @@ class VersionSet {
   // Return the log file number for the log file that is currently
   // being compacted, or zero if there is no such log file.
   //
-  // 返回当前正在进行压实的 log 文件的 number，如果没有文件在压实则返回 0.
+  // 返回当前正在进行压实的 log 文件的 number, 如果没有文件在压实则返回 0.
   uint64_t PrevLogNumber() const { return prev_log_number_; }
 
   // Pick level and inputs for a new compaction.
@@ -323,9 +323,9 @@ class VersionSet {
   // Otherwise returns a pointer to a heap-allocated object that
   // describes the compaction.  Caller should delete the result.
   //
-  // 为一个新的压实过程挑选 level 和输入文件。
-  // 如果不需要进行压实则返回 nullptr；否则返回一个指向在堆上分配的 compaction 对象的指针，该对象表示压实相关信息。
-  // 调用者负责释放返回的结果。
+  // 为一个新的压实过程挑选 level 和输入文件. 
+  // 如果不需要进行压实则返回 nullptr; 否则返回一个指向在堆上分配的 compaction 对象的指针, 该对象表示压实相关信息. 
+  // 调用者负责释放返回的结果. 
   Compaction* PickCompaction();
 
   // Return a compaction object for compacting the range [begin,end] in
@@ -333,8 +333,8 @@ class VersionSet {
   // level that overlaps the specified range.  Caller should delete
   // the result.
   //
-  // 为了压实指定 level 中 [begin,end] 范围返回一个 compaction 对象。
-  // 如果该 level 没有文件与该范围重叠则返回 nullptr。调用者负责释放返回的结果。
+  // 为了压实指定 level 中 [begin,end] 范围返回一个 compaction 对象. 
+  // 如果该 level 没有文件与该范围重叠则返回 nullptr. 调用者负责释放返回的结果. 
   Compaction* CompactRange(
       int level,
       const InternalKey* begin,
@@ -343,14 +343,14 @@ class VersionSet {
   // Return the maximum overlapping data (in bytes) at next level for any
   // file at a level >= 1.
   //
-  // 针对 level-1 及其以上的任意一个文件，返回下一层与之重叠的最大数据大小（单位，字节）
+  // 针对 level-1 及其以上的任意一个文件, 返回下一层与之重叠的最大数据大小(单位, 字节)
   int64_t MaxNextLevelOverlappingBytes();
 
   // Create an iterator that reads over the compaction inputs for "*c".
   // The caller should delete the iterator when no longer needed.
   //
-  // 创建一个 iterator，它负责读取压实后的输入 *c。
-  // 当 iterator 不再使用的时候，调用者负责删除它。
+  // 创建一个 iterator, 它负责读取压实后的输入 *c. 
+  // 当 iterator 不再使用的时候, 调用者负责删除它. 
   Iterator* MakeInputIterator(Compaction* c);
 
   // Returns true iff some level needs a compaction.
@@ -364,8 +364,8 @@ class VersionSet {
   // Add all files listed in any live version to *live.
   // May also mutate some internal state.
   //
-  // 将任意活跃的 version 中的全部文件添加到 *live 中。
-  // 可能会修改一些内部状态。
+  // 将任意活跃的 version 中的全部文件添加到 *live 中. 
+  // 可能会修改一些内部状态. 
   void AddLiveFiles(std::set<uint64_t>* live);
 
   // Return the approximate offset in the database of the data for
@@ -379,8 +379,8 @@ class VersionSet {
   struct LevelSummaryStorage {
     char buffer[100];
   };
-  // 针对每一个 level 返回一个人类可读的短（一行）摘要。
-  // 使用 *scratch 作为底层存储。
+  // 针对每一个 level 返回一个人类可读的短(一行)摘要. 
+  // 使用 *scratch 作为底层存储. 
   const char* LevelSummary(LevelSummaryStorage* scratch) const;
 
  private:
@@ -407,8 +407,8 @@ class VersionSet {
   // Save current contents to *log
   Status WriteSnapshot(log::Writer* log);
 
-  // 每个 VersionSet 包含一组 Version，这里是将 Version 加入到该 VersionSet 中,
-  // 具体操作为将 v 插入到双向循环链表，且位于 dummy_versions_ 前面。
+  // 每个 VersionSet 包含一组 Version, 这里是将 Version 加入到该 VersionSet 中,
+  // 具体操作为将 v 插入到双向循环链表, 且位于 dummy_versions_ 前面. 
   void AppendVersion(Version* v);
 
   Env* const env_;
@@ -425,8 +425,8 @@ class VersionSet {
   // Opened lazily
   WritableFile* descriptor_file_;
   log::Writer* descriptor_log_;
-  // 属于该 VersionSet 的 Version 都会被维护到一个双向循环链表中，
-  // 而且新加入的 Version 都会插入到 dummy_versions_ 前面。
+  // 属于该 VersionSet 的 Version 都会被维护到一个双向循环链表中, 
+  // 而且新加入的 Version 都会插入到 dummy_versions_ 前面. 
   Version dummy_versions_;  // Head of circular doubly-linked list of versions.
   // 指向最新加入的 Version
   Version* current_;        // == dummy_versions_.prev_
@@ -449,24 +449,24 @@ class Compaction {
   // Return the level that is being compacted.  Inputs from "level"
   // and "level+1" will be merged to produce a set of "level+1" files.
   //
-  // 返回正在进行压实的 level。
-  // 来自 level 和 level+1 的输入将会被合并，然后产生一组 level+1 文件。
+  // 返回正在进行压实的 level. 
+  // 来自 level 和 level+1 的输入将会被合并, 然后产生一组 level+1 文件. 
   int level() const { return level_; }
 
   // Return the object that holds the edits to the descriptor done
   // by this compaction.
   //
-  // 返回一个 VersionEdit 对象，该对象持有本次压实针对的描述符的编辑内容。
+  // 返回一个 VersionEdit 对象, 该对象持有本次压实针对的描述符的编辑内容. 
   VersionEdit* edit() { return &edit_; }
 
   // "which" must be either 0 or 1
   //
-  // 参数 which 非 0 即 1，因为 input_ 长度为 2。
+  // 参数 which 非 0 即 1, 因为 input_ 长度为 2. 
   int num_input_files(int which) const { return inputs_[which].size(); }
 
   // Return the ith input file at "level()+which" ("which" must be 0 or 1).
   //
-  // 返回 level() + which 中的第 i 个输入文件，which 非 0 即 1.
+  // 返回 level() + which 中的第 i 个输入文件, which 非 0 即 1.
   FileMetaData* input(int which, int i) const { return inputs_[which][i]; }
 
   // Maximum size of files to build during this compaction.
@@ -477,8 +477,8 @@ class Compaction {
   // Is this a trivial compaction that can be implemented by just
   // moving a single input file to the next level (no merging or splitting)
   //
-  // 如果一次压实可以通过将单个输入文件移动到下一层实现，中间不涉及合并或者拆分。
-  // 那这就是一个平凡的压实。
+  // 如果一次压实可以通过将单个输入文件移动到下一层实现, 中间不涉及合并或者拆分. 
+  // 那这就是一个平凡的压实. 
   bool IsTrivialMove() const;
 
   // Add all inputs to this compaction as delete operations to *edit.
@@ -490,9 +490,9 @@ class Compaction {
   // the compaction is producing data in "level+1" for which no data exists
   // in levels greater than "level+1".
   //
-  // 如果我们可用的信息能够保证圧实正在 "level+1" 产生数据，
-  // 而且对于 "level+1" 来说，它包含的数据没有出现在更高层，
-  // 那么返回 true。
+  // 如果我们可用的信息能够保证圧实正在 "level+1" 产生数据, 
+  // 而且对于 "level+1" 来说, 它包含的数据没有出现在更高层, 
+  // 那么返回 true. 
   bool IsBaseLevelForKey(const Slice& user_key);
 
   // Returns true iff we should stop building the current output
@@ -504,7 +504,7 @@ class Compaction {
   // Release the input version for the compaction, once the compaction
   // is successful.
   //
-  // 圧实成功后，释放输入。
+  // 圧实成功后, 释放输入. 
   void ReleaseInputs();
 
  private:
@@ -543,9 +543,9 @@ class Compaction {
   // higher level than the ones involved in this compaction (i.e. for
   // all L >= level_ + 2).
   //
-  // 用于实现 IsBaseLevelForKey 方法。
+  // 用于实现 IsBaseLevelForKey 方法. 
   // level_ptrs_ 持有 input_version_->levels_ 的索引：
-  // 我们被定位到其中一个文件范围内，对于没一个比当前中那个在进行压实的 level。
+  // 我们被定位到其中一个文件范围内, 对于没一个比当前中那个在进行压实的 level. 
   size_t level_ptrs_[config::kNumLevels];
 };
 

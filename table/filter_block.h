@@ -27,11 +27,11 @@ class FilterPolicy;
 // The sequence of calls to FilterBlockBuilder must match the regexp:
 //      (StartBlock AddKey*)* Finish
 //
-// FilterBlockBuilder 用于构造 table 的全部 filters。最后生成一个字符串保存在 Table 的一个特殊的 block 中。
+// FilterBlockBuilder 用于构造 table 的全部 filters. 最后生成一个字符串保存在 Table 的一个特殊的 block 中. 
 //
 // 该类方法调用序列必须满足下面的正则表达式：
 //      (StartBlock AddKey*)* Finish
-// 最少调用一次 Finish，而且 AddKey 和 Finish 之间不能插入 StartBlock 调用。
+// 最少调用一次 Finish, 而且 AddKey 和 Finish 之间不能插入 StartBlock 调用. 
 class FilterBlockBuilder {
  public:
   explicit FilterBlockBuilder(const FilterPolicy*);
@@ -50,8 +50,8 @@ class FilterBlockBuilder {
   std::vector<size_t> start_;     // Starting index in keys_ of each key
   // 目前为止计算出来的 filter 数据
   std::string result_;            // Filter data computed so far
-  // 临时变量，用于 policy_->CreateFilter()
-  std::vector<Slice> tmp_keys_;   // policy_->CreateFilter() argument 内容与 keys_ 一样不过是 Slice 类型，专用于 policy_->CreateFilter()
+  // 临时变量, 用于 policy_->CreateFilter()
+  std::vector<Slice> tmp_keys_;   // policy_->CreateFilter() argument 内容与 keys_ 一样不过是 Slice 类型, 专用于 policy_->CreateFilter()
   std::vector<uint32_t> filter_offsets_; // 每个 filter 对应的在 filter block 中的偏移量
 
   // No copying allowed
@@ -59,7 +59,7 @@ class FilterBlockBuilder {
   void operator=(const FilterBlockBuilder&);
 };
 
-// 与 FilterBlockBuilder 相反，将一个 filter block 解析出来，然后用来查询某个 key 是否在某个 block 中
+// 与 FilterBlockBuilder 相反, 将一个 filter block 解析出来, 然后用来查询某个 key 是否在某个 block 中
 class FilterBlockReader {
  public:
  // REQUIRES: "contents" and *policy must stay live while *this is live.
@@ -74,7 +74,7 @@ class FilterBlockReader {
   const char* offset_;  // Pointer to beginning of offset array (at block-end)
   // offset array 元素个数
   size_t num_;          // Number of entries in offset array
-  // base 的 log，位于 filter block 最后一个字节，具体见 table_format.md 介绍
+  // base 的 log, 位于 filter block 最后一个字节, 具体见 table_format.md 介绍
   size_t base_lg_;      // Encoding parameter (see kFilterBaseLg in .cc file)
 };
 

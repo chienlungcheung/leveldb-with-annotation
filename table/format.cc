@@ -21,8 +21,8 @@ void BlockHandle::EncodeTo(std::string* dst) const {
   PutVarint64(dst, size_);
 }
 
-// 将 input 指向的内容解码为一个 BlockHandle。
-// 成功返回 OK；否则返回 not-OK.
+// 将 input 指向的内容解码为一个 BlockHandle. 
+// 成功返回 OK; 否则返回 not-OK.
 Status BlockHandle::DecodeFrom(Slice* input) {
   if (GetVarint64(input, &offset_) &&
       GetVarint64(input, &size_)) {
@@ -32,12 +32,12 @@ Status BlockHandle::DecodeFrom(Slice* input) {
   }
 }
 
-// 将一个 Footer 编码写入到 dst 指向内存，
-// 包括将两个 BlockHandle 分别编码写入内存，
-// 然后通过 string::resize 做 padding，
-// 最后将 8 字节魔数按照小端模式追加进来。
+// 将一个 Footer 编码写入到 dst 指向内存, 
+// 包括将两个 BlockHandle 分别编码写入内存, 
+// 然后通过 string::resize 做 padding, 
+// 最后将 8 字节魔数按照小端模式追加进来. 
 void Footer::EncodeTo(std::string* dst) const {
-  const size_t original_size = dst->size(); // dst 本来为空才行，否则两个 BlockHandle 恰好为 40 字节那后面 resize 可能丢数据。
+  const size_t original_size = dst->size(); // dst 本来为空才行, 否则两个 BlockHandle 恰好为 40 字节那后面 resize 可能丢数据. 
   metaindex_handle_.EncodeTo(dst);
   index_handle_.EncodeTo(dst);
   dst->resize(2 * BlockHandle::kMaxEncodedLength);  // Padding
@@ -47,9 +47,9 @@ void Footer::EncodeTo(std::string* dst) const {
   (void)original_size;  // Disable unused variable warning.
 }
 
-// 从 input 指向内存解码出一个 Footer，
-// 先解码最后 8 字节的魔数（按照小端模式），
-// 然后一次解码两个 BlockHandle。
+// 从 input 指向内存解码出一个 Footer, 
+// 先解码最后 8 字节的魔数(按照小端模式), 
+// 然后一次解码两个 BlockHandle. 
 Status Footer::DecodeFrom(Slice* input) {
   const char* magic_ptr = input->data() + kEncodedLength - 8;
   const uint32_t magic_lo = DecodeFixed32(magic_ptr);
@@ -67,7 +67,7 @@ Status Footer::DecodeFrom(Slice* input) {
   if (result.ok()) { // 此时 input 包含的数据只有可能的 padding 0 了
     // We skip over any leftover data (just padding for now) in "input"
     const char* end = magic_ptr + 8;
-    *input = Slice(end, input->data() + input->size() - end); // todo Slice 第二个参数为负数，生成这样的对象的目的为何呢？
+    *input = Slice(end, input->data() + input->size() - end); // todo Slice 第二个参数为负数, 生成这样的对象的目的为何呢？
   }
   return result;
 }
@@ -86,7 +86,7 @@ Status ReadBlock(RandomAccessFile* file,
   // Read the block contents as well as the type/crc footer.
   // See table_builder.cc for the code that built this structure.
   size_t n = static_cast<size_t>(handle.size()); // 要读取的 block 的大小
-  char* buf = new char[n + kBlockTrailerSize]; // 每个 block 后面跟着它的 type （1 字节）和 crc （4 字节）
+  char* buf = new char[n + kBlockTrailerSize]; // 每个 block 后面跟着它的 type (1 字节)和 crc (4 字节)
   Slice contents;
   // handle.offset() 指向对应 block 在文件里的起始偏移量
   Status s = file->Read(handle.offset(), n + kBlockTrailerSize, &contents, buf);
@@ -116,7 +116,7 @@ Status ReadBlock(RandomAccessFile* file,
   }
 
   /**
-   * 解析 type，并根据 type 解析 block data
+   * 解析 type, 并根据 type 解析 block data
    */
   // type 表示 block 的压缩状态
   switch (data[n]) {

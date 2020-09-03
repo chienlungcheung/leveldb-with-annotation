@@ -33,11 +33,11 @@ class LEVELDB_EXPORT Cache;
  */
 LEVELDB_EXPORT Cache* NewLRUCache(size_t capacity);
 
-// Cache 就是一个用来保存 <key, value> 数据项，它内部自带同步设施，可以安全地被多个线程并发访问。
+// Cache 就是一个用来保存 <key, value> 数据项, 它内部自带同步设施, 可以安全地被多个线程并发访问. 
 //
-// 如果满了，Cache 可以自动地清除之前的数据为新数据腾地方。
+// 如果满了, Cache 可以自动地清除之前的数据为新数据腾地方. 
 //
-// leveldb 自带的实现是基于 LRU 算法的（ShardedLRUCache），使用者也可以定制自己的缓存算法。
+// leveldb 自带的实现是基于 LRU 算法的(ShardedLRUCache), 使用者也可以定制自己的缓存算法. 
 //
 class LEVELDB_EXPORT Cache {
  public:
@@ -48,11 +48,11 @@ class LEVELDB_EXPORT Cache {
 
   // Destroys all existing entries by calling the "deleter"
   // function that was passed to the constructor.
-  // 析构时调用构造时传入的 deleter 函数销毁每一个数据项。
+  // 析构时调用构造时传入的 deleter 函数销毁每一个数据项. 
   virtual ~Cache();
 
   // Opaque handle to an entry stored in the cache.
-  // Cache 中存储的数据项的抽象类型，具体实现参见 LRUHandle
+  // Cache 中存储的数据项的抽象类型, 具体实现参见 LRUHandle
   struct Handle { };
 
   // Insert a mapping from key->value into the cache and assign it
@@ -65,11 +65,11 @@ class LEVELDB_EXPORT Cache {
   // When the inserted entry is no longer needed, the key and
   // value will be passed to "deleter".
   /**
-   * 插入一个 <key, value> 映射到 cache 中，同时为这个映射赋值一个指定的针对 cache 总容量的花费。
+   * 插入一个 <key, value> 映射到 cache 中, 同时为这个映射赋值一个指定的针对 cache 总容量的花费. 
    *
-   * 该方法返回一个 handle，该 handle 对应本次插入的映射。当调用者不再需要这个映射的时候，需要调用 this->Release(handle)。
+   * 该方法返回一个 handle, 该 handle 对应本次插入的映射. 当调用者不再需要这个映射的时候, 需要调用 this->Release(handle). 
    *
-   * 当被插入的数据项不再被需要时，key 和 value 将会被传递给这里指定的 deleter。
+   * 当被插入的数据项不再被需要时, key 和 value 将会被传递给这里指定的 deleter. 
    * @param key 要插入的映射的 key
    * @param value 要插入的映射的 value
    * @param charge 要插入的映射对应的花费
@@ -85,9 +85,9 @@ class LEVELDB_EXPORT Cache {
   // must call this->Release(handle) when the returned mapping is no
   // longer needed.
   /**
-   * 如果 cache 中没有针对 key 的映射，返回 nullptr。
+   * 如果 cache 中没有针对 key 的映射, 返回 nullptr. 
    *
-   * 其它情况返回对应该映射的 handle。当不再需要这个映射的时候，调用者必须调用 this->Release(handle)。
+   * 其它情况返回对应该映射的 handle. 当不再需要这个映射的时候, 调用者必须调用 this->Release(handle). 
    * @param key 要查询映射的 key
    * @return 要查询的映射对应的 handle
    */
@@ -97,7 +97,7 @@ class LEVELDB_EXPORT Cache {
   // REQUIRES: handle must not have been released yet.
   // REQUIRES: handle must have been returned by a method on *this.
   /**
-   * 先通过 Lookup 查询映射对应的 handle，然后调用该函数来释放该映射。
+   * 先通过 Lookup 查询映射对应的 handle, 然后调用该函数来释放该映射. 
    *
    * 要求：handle 之前未被释放过
    *
@@ -111,7 +111,7 @@ class LEVELDB_EXPORT Cache {
   // REQUIRES: handle must not have been released yet.
   // REQUIRES: handle must have been returned by a method on *this.
   /**
-   * 返回通过成功调用 Lookup 后返回的 handle 中封装的 value。
+   * 返回通过成功调用 Lookup 后返回的 handle 中封装的 value. 
    *
    * 要求：handle 之前未被释放过
    *
@@ -125,8 +125,8 @@ class LEVELDB_EXPORT Cache {
   // underlying entry will be kept around until all existing handles
   // to it have been released.
   /**
-   * 如果 cache 包含了 key 对应的映射，删除之。
-   * 注意，底层的数据项将会继续存在直到现有的指向该数据项的全部 handles 已被释放掉。
+   * 如果 cache 包含了 key 对应的映射, 删除之. 
+   * 注意, 底层的数据项将会继续存在直到现有的指向该数据项的全部 handles 已被释放掉. 
    * @param key 要删除的映射对应的 key
    */
   virtual void Erase(const Slice& key) = 0;
@@ -136,9 +136,9 @@ class LEVELDB_EXPORT Cache {
   // client will allocate a new id at startup and prepend the id to
   // its cache keys.
   /**
-   * 返回一个新生成的数字格式的 id。如果有客户端在使用该 cache 则为其分配一个 id。
+   * 返回一个新生成的数字格式的 id. 如果有客户端在使用该 cache 则为其分配一个 id. 
    *
-   * 典型地用法是，某个客户端在启动时调用该方法生成一个新 id，然后将该 id 作为它的 keys 的前缀。
+   * 典型地用法是, 某个客户端在启动时调用该方法生成一个新 id, 然后将该 id 作为它的 keys 的前缀. 
    * @return
    */
   virtual uint64_t NewId() = 0;
@@ -149,10 +149,10 @@ class LEVELDB_EXPORT Cache {
   // encouraged to override the default implementation.  A future release of
   // leveldb may change Prune() to a pure abstract method.
   /**
-   * 移除全部不再使用的 cache 项。内存受限的应用可以调用该方法来减少内存使用。
+   * 移除全部不再使用的 cache 项. 内存受限的应用可以调用该方法来减少内存使用. 
    *
-   * 该方法的默认实现什么也不做。强烈建议在派生类实现中重写该方法。leveldb 未来版本可能会将
-   * 该方法修改为一个纯抽象方法。
+   * 该方法的默认实现什么也不做. 强烈建议在派生类实现中重写该方法. leveldb 未来版本可能会将
+   * 该方法修改为一个纯抽象方法. 
    */
   virtual void Prune() {}
 

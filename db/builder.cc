@@ -39,20 +39,20 @@ Status BuildTable(const std::string& dbname,
     TableBuilder* builder = new TableBuilder(options, file);
     // 获取要写入的 memtable 的最小 key 并保存到 meta->smallest
     meta->smallest.DecodeFrom(iter->key());
-    // 迭代 memtable，将 <key, value> 写入到 TableBuilder，并保存最大的 key 到 meta->largest
+    // 迭代 memtable, 将 <key, value> 写入到 TableBuilder, 并保存最大的 key 到 meta->largest
     for (; iter->Valid(); iter->Next()) {
       Slice key = iter->key();
-      // 因为 memtable 基于 skiplist 是从小到大有序的，所以最后访问的那个数据项的 key 必定是最大的
+      // 因为 memtable 基于 skiplist 是从小到大有序的, 所以最后访问的那个数据项的 key 必定是最大的
       meta->largest.DecodeFrom(key);
       builder->Add(key, iter->value());
     }
 
     // Finish and check for builder errors
-    // 将 TableBuilder 中的数据按照 table 文件的格式写入到文件，
-    // table 文件构成：data blocks，filter block，metaindex block，index block
+    // 将 TableBuilder 中的数据按照 table 文件的格式写入到文件, 
+    // table 文件构成：data blocks, filter block, metaindex block, index block
     s = builder->Finish();
     if (s.ok()) {
-      // 写成功，将 table 文件大小保存到 meta->file_size
+      // 写成功, 将 table 文件大小保存到 meta->file_size
       meta->file_size = builder->FileSize();
       assert(meta->file_size > 0);
     }
@@ -68,7 +68,7 @@ Status BuildTable(const std::string& dbname,
       // 同步成功则关闭文件
       s = file->Close();
     }
-    // 不管文件是否同步成功，都删除文件对象
+    // 不管文件是否同步成功, 都删除文件对象
     delete file;
     file = nullptr;
 
@@ -78,7 +78,7 @@ Status BuildTable(const std::string& dbname,
       Iterator* it = table_cache->NewIterator(ReadOptions(),
                                               meta->number,
                                               meta->file_size);
-      // 如果 table 不可用，则 it 为一个无效迭代器，其对应状态也是 non-ok 的。
+      // 如果 table 不可用, 则 it 为一个无效迭代器, 其对应状态也是 non-ok 的. 
       s = it->status();
       // 无效迭代器也是可以删除的
       delete it;
@@ -91,11 +91,11 @@ Status BuildTable(const std::string& dbname,
     s = iter->status();
   }
 
-  // 中间未发生错误，并且构造的 Table 文件大小大于 0，则成功
+  // 中间未发生错误, 并且构造的 Table 文件大小大于 0, 则成功
   if (s.ok() && meta->file_size > 0) {
     // Keep it
   } else {
-    // 发生了错误或者迭代器 iter 对应的 memtable 为空，则删除创建的文件
+    // 发生了错误或者迭代器 iter 对应的 memtable 为空, 则删除创建的文件
     env->DeleteFile(fname);
   }
   return s;

@@ -8,7 +8,7 @@
 #include <string.h>
 
 /**
- * 用于移植，根据不同宏 include 不同的与平台相关的头文件
+ * 用于移植, 根据不同宏 include 不同的与平台相关的头文件
  */
 // Include the appropriate platform specific file below.  If you are
 // porting to a new platform, see "port_example.h" for documentation

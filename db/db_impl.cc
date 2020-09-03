@@ -40,6 +40,7 @@ namespace leveldb {
 const int kNumNonTableCacheFiles = 10;
 
 // Information kept for every waiting writer
+// 针对调用 db 进行的写操作, 都会生成一个对应的 writer, 其封装了写入数据和写入进度.
 struct DBImpl::Writer {
   Status status;
   WriteBatch* batch;
@@ -151,7 +152,7 @@ DBImpl::DBImpl(const Options& raw_options, const std::string& dbname)
 DBImpl::~DBImpl() {
   // Wait for background work to finish
   mutex_.Lock();
-  shutting_down_.Release_Store(this);  // Any non-null value is ok 随便存个非空值即可，标记正在关闭
+  shutting_down_.Release_Store(this);  // Any non-null value is ok 随便存个非空值即可, 标记正在关闭
   while (background_compaction_scheduled_) { // 循环是为了防止虚假唤醒误判
     background_work_finished_signal_.Wait(); // 等待后台工作结束
   }
@@ -490,7 +491,7 @@ Status DBImpl::RecoverLogFile(uint64_t log_number, bool last_log,
   return status;
 }
 
-// 将 mem 对应的 memtable 以 table 文件形式保存到磁盘并将其对应的元信息（level、filemeta 等）保存到 edit 中
+// 将 mem 对应的 memtable 以 table 文件形式保存到磁盘并将其对应的元信息(level、filemeta 等)保存到 edit 中
 Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
                                 Version* base) {
   mutex_.AssertHeld();
@@ -498,7 +499,7 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
   FileMetaData meta;
   // 为 memtable 对应的 table 文件生成一个文件号
   meta.number = versions_->NewFileNumber();
-  // 保护 number 对应的 table 文件，避免在压实过程中被删除
+  // 保护 number 对应的 table 文件, 避免在压实过程中被删除
   pending_outputs_.insert(meta.number);
   // 获取 memtable 对应的迭代器
   Iterator* iter = mem->NewIterator();
@@ -507,11 +508,11 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
 
   Status s;
   {
-    // 构造 Table 文件的时候与 mutex_ 要守护的成员变量无关，可以解除锁定
+    // 构造 Table 文件的时候与 mutex_ 要守护的成员变量无关, 可以解除锁定
     mutex_.Unlock();
     // 基于 memtable 的迭代器 iter 构造一个 Table 文件
     s = BuildTable(dbname_, env_, options_, table_cache_, iter, &meta);
-    // 构造完毕，重新获取锁，诸如 pending_outputs_ 需要 mutex_ 来守护
+    // 构造完毕, 重新获取锁, 诸如 pending_outputs_ 需要 mutex_ 来守护
     mutex_.Lock();
   }
 
@@ -526,7 +527,7 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
 
   // Note that if file_size is zero, the file has been deleted and
   // should not be added to the manifest.
-  // 如果 file_size 等于 0，则对应文件已经被删除了而且不应该加入到 manifest 中。
+  // 如果 file_size 等于 0, 则对应文件已经被删除了而且不应该加入到 manifest 中. 
   int level = 0;
   if (s.ok() && meta.file_size > 0) {
     // meta 相关成员信息在 BuildTable 时填充过了
@@ -560,7 +561,7 @@ void DBImpl::CompactMemTable() {
   Version* base = versions_->current();
   // 将该 version 活跃引用计数加一
   base->Ref();
-  // 将 imm_ 对应的 memtable 以 table 文件形式保存到磁盘并将其对应的元信息（level、filemeta 等）保存到 edit 中
+  // 将 imm_ 对应的 memtable 以 table 文件形式保存到磁盘并将其对应的元信息(level、filemeta 等)保存到 edit 中
   Status s = WriteLevel0Table(imm_, &edit, base);
   // 将该 version 活跃引用计数减一
   base->Unref();
@@ -574,21 +575,21 @@ void DBImpl::CompactMemTable() {
   // 用生成的 Table 替换不可变的 memtable
   if (s.ok()) {
     edit.SetPrevLogNumber(0);
-    // memetable 已经转换为 Table 写入磁盘了，之前的 logs 都不需要了。
+    // memetable 已经转换为 Table 写入磁盘了, 之前的 logs 都不需要了. 
     edit.SetLogNumber(logfile_number_);  // Earlier logs no longer needed
     s = versions_->LogAndApply(&edit, &mutex_);
   }
 
   if (s.ok()) {
     // Commit to the new state
-    // 压实完成，释放引用
+    // 压实完成, 释放引用
     imm_->Unref();
     imm_ = nullptr;
     has_imm_.Release_Store(nullptr);
     // 删除过期文件
     DeleteObsoleteFiles();
   } else {
-    // 压实失败，记录错误
+    // 压实失败, 记录错误
     RecordBackgroundError(s);
   }
 }
@@ -1231,22 +1232,29 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
   w.sync = options.sync;
   w.done = false;
 
+  // 加锁保护下面的 writers_ 队列操作
   MutexLock l(&mutex_);
-  writers_.push_back(&w); // 注意，指针是内置类型，当做为右值类型时支持 move 语义，所以这里调用的就是 deque 的右值引用版本的 push_back
-  while (!w.done && &w != writers_.front()) { // 当前 writer 工作没完成并且当前队列首元素不是该 writer
+  // 注意, 指针是内置类型, 当做为右值类型时支持 move 语义, 
+  // 所以这里调用的就是 deque 的右值引用版本的 push_back
+  writers_.push_back(&w); 
+  // 当前 writer 工作没完成并且不是队首元素, 则当前有其它 writer 在写, 挂起当前 writer 等待条件成熟
+  while (!w.done && &w != writers_.front()) { 
+    // 临时释放锁
     w.cv.Wait();
   }
-  if (w.done) { // 当前 writer 工作已经完成了
+  // 当前 writer 如果被排在前面 writer 给合并写入了, 那么它的 done 就被标记为完成了.
+  if (w.done) { 
     return w.status;
   }
 
-  // 到这只有一个原因，那就是 w 没有完成工作，且 w 是 writer 队列的首元素
-
   // May temporarily unlock and wait.
+  // 确认是否为本次写操作分配新的 log 文件, 如果需要则分配
   Status status = MakeRoomForWrite(my_batch == nullptr);
   uint64_t last_sequence = versions_->LastSequence();
   Writer* last_writer = &w;
   if (status.ok() && my_batch != nullptr) {  // nullptr batch is for compactions
+    // 队首 writer 负责将队列前面若干 writers 的 batch 合并为一个, 注意, 被合并的 writers 不出队,
+    // 写 log 期间队首 writer 不变.
     WriteBatch* updates = BuildBatchGroup(&last_writer);
     WriteBatchInternal::SetSequence(updates, last_sequence + 1);
     last_sequence += WriteBatchInternal::Count(updates);
@@ -1256,7 +1264,10 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
     // and protects against concurrent loggers and concurrent writes
     // into mem_.
     {
+      // 这里临时释放可以让队列中被合并的其它 writer 得以进入方法开头的 while 循环内进行 wait;
+      // 最佳情况是下面写 log 时候, 被代表的 writers 全部进入了 wait 状态.
       mutex_.Unlock();
+      // 将合并后的 batch 作为 record 追加到 log 文件中
       status = log_->AddRecord(WriteBatchInternal::Contents(updates));
       bool sync_error = false;
       if (status.ok() && options.sync) {
@@ -1266,6 +1277,7 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
         }
       }
       if (status.ok()) {
+        // 如果追加 log 文件成功,则将被追加的数据插入到内存中的 mmtable 中
         status = WriteBatchInternal::InsertInto(updates, mem_);
       }
       mutex_.Lock();
@@ -1281,19 +1293,26 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
     versions_->SetLastSequence(last_sequence);
   }
 
+  // 参与上面 batch group 写入 log 文件的 writer 都取出来并设置为写入完成
   while (true) {
+    // [&w, last_writer] 的 batch 被合并写入 log 了, 所以将其出队.
     Writer* ready = writers_.front();
     writers_.pop_front();
+    // &w 并没有 wait, 它是本次负责合并并写入的 writer
     if (ready != &w) {
       ready->status = status;
       ready->done = true;
+      // 唤醒当前方法入口的 w.cv.Wait(), 通过此处被唤醒的 writers 都是被合并到队首 writer 统一写入 log 文件的.
+      // 它们被唤醒后, 只需检查下 done 状态就可以返回了.
       ready->cv.Signal();
     }
+    // last_writer 指向被合并处理的最后一个 writer
     if (ready == last_writer) break;
   }
 
   // Notify new head of write queue
   if (!writers_.empty()) {
+    // 叫醒新的待写入 writer
     writers_.front()->cv.Signal();
   }
 
@@ -1302,13 +1321,19 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
 
 // REQUIRES: Writer list must be non-empty
 // REQUIRES: First writer must have a non-null batch
+//
+// 当外部调用 db 写数据时, 该方法将队列前若干 writer 的 batch 合并到一起.
+// 返回合并后的结果 batch, 参数 last_writer 也作为输出参数, 包含了被合并的最后一个 writer 的指针.
 WriteBatch* DBImpl::BuildBatchGroup(Writer** last_writer) {
   mutex_.AssertHeld();
   assert(!writers_.empty());
+  // 取出队首 writer
   Writer* first = writers_.front();
+  // 取出队首 writer 的待写数据集
   WriteBatch* result = first->batch;
   assert(result != nullptr);
 
+  // 计算队首 writer 数据集大小
   size_t size = WriteBatchInternal::ByteSize(first->batch);
 
   // Allow the group to grow up to a maximum size, but if the
@@ -1322,6 +1347,7 @@ WriteBatch* DBImpl::BuildBatchGroup(Writer** last_writer) {
   *last_writer = first;
   std::deque<Writer*>::iterator iter = writers_.begin();
   ++iter;  // Advance past "first"
+  // iter 从 first 之后 writer 开始遍历
   for (; iter != writers_.end(); ++iter) {
     Writer* w = *iter;
     if (w->sync && !first->sync) {
@@ -1339,12 +1365,14 @@ WriteBatch* DBImpl::BuildBatchGroup(Writer** last_writer) {
       // Append to *result
       if (result == first->batch) {
         // Switch to temporary batch instead of disturbing caller's batch
+        // 不篡改 first writer 的 batch, 而是把若干 batch 合并到临时的 tmp_batch_ 中
         result = tmp_batch_;
         assert(WriteBatchInternal::Count(result) == 0);
         WriteBatchInternal::Append(result, first->batch);
       }
       WriteBatchInternal::Append(result, w->batch);
     }
+    // last_writer 指向被合并的最后一个 writer
     *last_writer = w;
   }
   return result;
@@ -1352,7 +1380,9 @@ WriteBatch* DBImpl::BuildBatchGroup(Writer** last_writer) {
 
 // REQUIRES: mutex_ is held
 // REQUIRES: this thread is currently at the front of the writer queue
-//
+// 
+// 当外部调用 db 写数据时, 该方法被调用负责根据实际情况创建新的 log 文件.
+// 
 // 调用该方法前提：
 // - mutex_ 被当前线程持有
 // - 当前线程当前在 writer 队列的队首
@@ -1366,9 +1396,8 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       // Yield previous error
       s = bg_error_;
       break;
-    } else if (
-        allow_delay &&
-        versions_->NumLevelFiles(0) >= config::kL0_SlowdownWritesTrigger) {
+    } else if (allow_delay &&
+      versions_->NumLevelFiles(0) >= config::kL0_SlowdownWritesTrigger) {
       // We are getting close to hitting a hard limit on the number of
       // L0 files.  Rather than delaying a single write by several
       // seconds when we hit the hard limit, start delaying each
@@ -1382,6 +1411,7 @@ Status DBImpl::MakeRoomForWrite(bool force) {
     } else if (!force &&
                (mem_->ApproximateMemoryUsage() <= options_.write_buffer_size)) {
       // There is room in current memtable
+      // 如果 log 文件还没写满 4MB, 则不分配新的 log 文件
       break;
     } else if (imm_ != nullptr) {
       // We have filled up the current memtable, but the previous
@@ -1397,6 +1427,7 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       assert(versions_->PrevLogNumber() == 0);
       uint64_t new_log_number = versions_->NewFileNumber();
       WritableFile* lfile = nullptr;
+      // 分配新文件号, 创建新的 log 文件
       s = env_->NewWritableFile(LogFileName(dbname_, new_log_number), &lfile);
       if (!s.ok()) {
         // Avoid chewing through file number space in a tight loop.
@@ -1407,12 +1438,15 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       delete logfile_;
       logfile_ = lfile;
       logfile_number_ = new_log_number;
+      // 生成一个新的 log writer 负责写文件
       log_ = new log::Writer(lfile);
       imm_ = mem_;
       has_imm_.Release_Store(imm_);
+      // 创建一个与新 log 文件对应的 mmtable
       mem_ = new MemTable(internal_comparator_);
       mem_->Ref();
-      force = false;   // Do not force another compaction if have room
+      force = false; // Do not force another compaction if have room
+      // 如果需要触发压实操作, 则进行压实
       MaybeScheduleCompaction();
     }
   }
@@ -1515,13 +1549,16 @@ void DBImpl::GetApproximateSizes(
 // Default implementations of convenience methods that subclasses of DB
 // can call if they wish
 //
-// DB 的默认 Put 实现，派生类可以直接使用。
+// DB 的默认 Put 实现, 派生类可以直接使用. 
+// 但是 DB 未实现 Write 方法, 所以派生类需要自己实现, 然后调用 Put 时调用自己实现的 Write 方法.
 Status DB::Put(const WriteOptions& opt, const Slice& key, const Slice& value) {
   WriteBatch batch;
   batch.Put(key, value);
   return Write(opt, &batch);
 }
 
+// DB 的默认 Delete 实现, 派生类可以直接使用. 
+// 但是 DB 未实现 Write 方法, 所以派生类需要自己实现, 然后调用 Put 时调用自己实现的 Write 方法.
 Status DB::Delete(const WriteOptions& opt, const Slice& key) {
   WriteBatch batch;
   batch.Delete(key);

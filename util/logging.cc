@@ -23,11 +23,11 @@ void AppendNumberTo(std::string* str, uint64_t num) {
 void AppendEscapedStringTo(std::string* str, const Slice& value) {
   for (size_t i = 0; i < value.size(); i++) {
     char c = value[i];
-    if (c >= ' ' && c <= '~') { // 从空格到破折号都为可打印字符，其它为非可打印字符
+    if (c >= ' ' && c <= '~') { // 从空格到破折号都为可打印字符, 其它为非可打印字符
       str->push_back(c);
     } else {
       char buf[10];
-      snprintf(buf, sizeof(buf), "\\x%02x", // 输出形式为 xab 这种，长度不足 2 前面补 0
+      snprintf(buf, sizeof(buf), "\\x%02x", // 输出形式为 xab 这种, 长度不足 2 前面补 0
                static_cast<unsigned int>(c) & 0xff);
       str->append(buf);
     }

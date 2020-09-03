@@ -12,13 +12,13 @@
 // non-const method, all threads accessing the same Slice must use
 // external synchronization.
 /**
- * Slice 是 leveldb 自己定义的字符串类型，一个指向字符数组的指针 + 字符个数。
+ * Slice 是 leveldb 自己定义的字符串类型, 一个指向字符数组的指针 + 字符个数. 
  *
- * 所用字符数组是 char 型的，编码需要使用者自己处理。
+ * 所用字符数组是 char 型的, 编码需要使用者自己处理. 
  *
- * 指向的字符数组不在 Slice 内部，而是使用者提供的一个外部存储，所以使用过程中要确保这块存储是有效的。
+ * 指向的字符数组不在 Slice 内部, 而是使用者提供的一个外部存储, 所以使用过程中要确保这块存储是有效的. 
  *
- * Slice 类除了 const 方法，其他的方法都是非线程安全的，调用时需要自己加锁。
+ * Slice 类除了 const 方法, 其他的方法都是非线程安全的, 调用时需要自己加锁. 
  */
 #ifndef STORAGE_LEVELDB_INCLUDE_SLICE_H_
 #define STORAGE_LEVELDB_INCLUDE_SLICE_H_
@@ -47,7 +47,9 @@ class LEVELDB_EXPORT Slice {
   Slice(const char* s) : data_(s), size_(strlen(s)) { }
 
   // Intentionally copyable.
+  // 复制构造函数
   Slice(const Slice&) = default;
+  // 赋值构造函数
   Slice& operator=(const Slice&) = default;
 
   // Return a pointer to the beginning of the referenced data
@@ -109,7 +111,7 @@ inline bool operator!=(const Slice& x, const Slice& y) {
 
 inline int Slice::compare(const Slice& b) const {
   const size_t min_len = (size_ < b.size_) ? size_ : b.size_;
-  int r = memcmp(data_, b.data_, min_len); // 第一次比较先忽略长度，按照最短的那个长度，左端对齐逐字节按照字典序比较。
+  int r = memcmp(data_, b.data_, min_len); // 第一次比较先忽略长度, 按照最短的那个长度, 左端对齐逐字节按照字典序比较. 
   if (r == 0) { // 谁长谁大
     if (size_ < b.size_) r = -1;
     else if (size_ > b.size_) r = +1;

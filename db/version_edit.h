@@ -74,8 +74,8 @@ class VersionEdit {
   // REQUIRES: This version has not been saved (see VersionSet::SaveTo)
   // REQUIRES: "smallest" and "largest" are smallest and largest keys in file
   //
-  // 以指定的文件号码将文件保存到指定的 level。
-  // 前提：该 version 没有被保存过（见 VersionSet::SaveTo）
+  // 以指定的文件号码将文件保存到指定的 level. 
+  // 前提：该 version 没有被保存过(见 VersionSet::SaveTo)
   // 前提："smallest" 和 "largest" 分别是文件中最小的 key 和最大的 key
   void AddFile(int level, uint64_t file,
                uint64_t file_size,
@@ -124,7 +124,7 @@ class VersionEdit {
   std::vector< std::pair<int, InternalKey> > compact_pointers_;
   // 待删除文件列表
   DeletedFileSet deleted_files_;
-  // 新增文件列表（注意第二个参数不是指针类型）
+  // 新增文件列表(注意第二个参数不是指针类型)
   std::vector< std::pair<int, FileMetaData> > new_files_;
 };
 

@@ -20,7 +20,7 @@ namespace leveldb {
 //     ... some complex code, possibly with multiple return paths ...
 //   }
 /**
- * 一个 lock-guard，用于根据自己的作用域在构造方法和析构方法中分别自动调用所守护 mutex 的 lock 和 unlock。
+ * 一个 lock-guard, 用于根据自己的作用域在构造方法和析构方法中分别自动调用所守护 mutex 的 lock 和 unlock. 
  */
 class SCOPED_LOCKABLE MutexLock {
  public:
