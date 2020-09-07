@@ -26,6 +26,18 @@ static Status Open(const Options& options,
                     DB** dbptr);
 ```
 
+该方法在数据库启动时调用, 主要工作由 `leveldb::DBImpl::Recover` 方法完成, 后者主要做如下事情:
+
+- 1. 调用其 VersionSet 成员的 `leveldb::VersionSet::Recover` 方法该方法从磁盘读取 CURRENT 文件, 进而读取 MANIFEST 文件内容, 然后在内存建立 level 架构:
+  - 读取 CURRENT 文件(不存在则新建)找到最新的 MANIFEST 文件(不存在则新建)的名称
+  - 读取该 MANIFEST 文件内容与当前 Version 保存的 level 架构合并保存到一个新建的 Version 中, 然后将这个新的 version 作为当前的 version.
+  - 清理过期的文件
+  - 这一步我们可以打开全部 sstables, 但最好等会再打开
+  - 将 log 文件块转换为一个新的 level-0 sstable
+  - 将接下来的要写的数据写入一个新的 log 文件
+
+- 2. 遍历数据库目录下全部文件. 筛选出 sorted table 文件, 验证 VersionSet 包含的 level 架构图有效性; 同时将全部 log 文件筛选换出来后续反序列化成 memtable. 恢复 log 文件时会按照从旧到新逐个 log 文件恢复, 这样新的修改会覆盖旧的, 如果对应 mmtable 太大了, 将其转为 sorted table 文件写入磁盘, 同时将其对应的 table 对象放到 table_cache_ 缓存. 若发生 memtable 落盘表示 level 架构新增文件则将 save_manifest 标记为 true, 表示需要写变更日志到 manifest 文件. 恢复 log 文件主要由方法 `leveldb::DBImpl::RecoverLogFile` 负责完成.
+
 ### Put
 
 ``` cpp
@@ -41,6 +53,8 @@ virtual Status Put(const WriteOptions& options,
                     const Slice& value) = 0;
 ```
 
+该方法主要依赖 `leveldb::DBImpl::Write` 实现.
+
 ### Delete
 
 ``` cpp
@@ -53,6 +67,8 @@ virtual Status Put(const WriteOptions& options,
  */
 virtual Status Delete(const WriteOptions& options, const Slice& key) = 0;
 ```
+
+该方法主要依赖 `leveldb::DBImpl::Write` 实现.
 
 ### Write
 
@@ -68,6 +84,12 @@ virtual Status Delete(const WriteOptions& options, const Slice& key) = 0;
  */
 virtual Status Write(const WriteOptions& options, WriteBatch* updates) = 0;
 ```
+
+该方法是 `leveldb::DBImpl::Write` 原型.
+
+针对调用 db 进行的写操作, 都会生成一个对应的 `struct leveldb::DBImpl::Writer`, 其封装了写入数据和写入进度. 新构造的 writer 会被放入一个队列. 循环检查, 若当前 writer 工作没完成并且不是队首元素, 则当前有其它 writer 在写, 挂起当前 writer 等待条件成熟. 当前 writer 如果被排在前面的 writer 给合并写入了, 那么它的 done 就被标记为完成了. 否则会被其它在写入的 writer 调用其 signal 将其唤醒执行写入工作.
+
+当执行写入工作时(被前一个执行写入并完成工作的 writer 唤醒了), 首先确认是否为本次该 writer 写操作分配新的 log 文件, 如果需要则分配. 因为该 writer 成为队首 writer 了, 则它负责将队列前面若干 writers 的 batch 合并为一个(该工作由`leveldb::DBImpl::BuildBatchGroup` 负责完成), 注意, 被合并的 writers 不出队(待合并写入完成再出队, 具体见后面描述), 所以写 log 期间队首 writer 不变. 具体写入工作由 `leveldb::log::Writer::AddRecord` 负责, 就是将数据序列化为 record 写入 log 文件. 如果追加 log 文件成功,则将被追加的数据插入到内存中的 mmtable 中. 待写入完毕, 该 writer 将参与前述 batch group 写入 log 文件的 writer 都取出来并设置为写入完成, 即将其出队, 将其 done 置为 true, 同时向其发送信号将其唤醒, 被唤醒后它会检查其 done 标识并返回. 最后唤醒队首 writer 执行下一个合并写入.
 
 ### Get
 
@@ -85,6 +107,15 @@ virtual Status Write(const WriteOptions& options, WriteBatch* updates) = 0;
 virtual Status Get(const ReadOptions& options,
                     const Slice& key, std::string* value) = 0;
 ```
+
+- 1 先查询当前在用的 mmtable(具体工作由 `leveldb::MemTable::Get` 负责, 本质就是 SkipList 查询, 速度很快)
+- 2 如果没有则查询正在转换为 sorted table 的 mmtable 中寻找
+- 3 如果没有则我们在磁盘上采用从底向上 level-by-level 的寻找目标 key. 
+
+针对上述第 3 步, 具体由 db VersionSet 的当前 Version 负责, 因为该结构保存了 db 当前最新的 level 架构信息, 即每个 level 及其对应的文件列表和每个文件的键范围. 对应方法为 `leveldb::Version::Get`, 具体为:
+- 从低 level 向高 level 寻找. 由于 level 越低数据越新, 因此, 当我们在一个较低的 level 找到数据的时候, 不用在更高的 levels 找了.
+- 由于 level-0 文件之间可能存在重叠, 而且针对同一个 key, 后产生的文件数据更新所以先将包含 key 的文件找出来按照文件号从大到小(对应文件从新到老)排序查找 key;
+- 针对 level-1 及其以上 level, 由于每个 level 内文件之间不存在重叠, 于是在每个 level 中直接采用二分查找定位 key.
 
 ### NewIterator
 

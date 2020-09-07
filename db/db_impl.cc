@@ -296,7 +296,7 @@ Status DBImpl::Recover(VersionEdit* edit, bool *save_manifest) {
   // Ignore error from CreateDir since the creation of the DB is
   // committed only when the descriptor is created, and this directory
   // may already exist from a previous failed creation attempt.
-  // 创建数据库(一个目录代表一个数据库)
+  // 创建数据库目录(一个目录代表一个数据库)
   env_->CreateDir(dbname_);
   assert(db_lock_ == nullptr);
   // 锁定该目录
@@ -305,7 +305,7 @@ Status DBImpl::Recover(VersionEdit* edit, bool *save_manifest) {
     return s;
   }
 
-  // 如果 CURRENT 文件(记录当前 MENIFEST 文件名称)不存在
+  // 如果 CURRENT 文件(记录当前 MENIFEST 文件名称)不存在则创建之
   if (!env_->FileExists(CurrentFileName(dbname_))) {
     if (options_.create_if_missing) {
       // 创建之
@@ -356,7 +356,9 @@ Status DBImpl::Recover(VersionEdit* edit, bool *save_manifest) {
   uint64_t number;
   FileType type;
   std::vector<uint64_t> logs;
-  // 遍历数据库目录下全部文件, 筛选出
+  // 遍历数据库目录下全部文件.
+  // 筛选出 sorted table 文件, 验证 version 包含的 level 架构图有效性;
+  // 同时将全部 log 文件筛选换出来待下面解析成 memtable.
   for (size_t i = 0; i < filenames.size(); i++) {
     // 解析文件类型
     if (ParseFileName(filenames[i], &number, &type)) {
@@ -377,7 +379,7 @@ Status DBImpl::Recover(VersionEdit* edit, bool *save_manifest) {
   }
 
   // Recover in the order in which the logs were generated
-  // 将 logs 列表从旧到新排序, 逐个恢复.
+  // 将 log 文件列表按照文件名从旧到新排序, 逐个恢复.
   std::sort(logs.begin(), logs.end());
   for (size_t i = 0; i < logs.size(); i++) {
     // 从旧到新逐个 log 文件恢复, 如果有 log 文件转换为 sorted table 文件(如大小到达阈值)落盘则
@@ -1226,7 +1228,7 @@ Status DBImpl::Get(const ReadOptions& options,
     // 先查询内存中与当前 log 文件对应的 mmtable, 查不到再逐 level 去 sorted table 文件查找
     if (mem->Get(lkey, value, &s)) {
       // Done
-      // 查不到再去正在被压实的 mmtable 去查询
+      // 查不到再去待压实的 mmtable 去查询
     } else if (imm != nullptr && imm->Get(lkey, value, &s)) {
       // Done
     } else {
@@ -1286,6 +1288,7 @@ Status DBImpl::Delete(const WriteOptions& options, const Slice& key) {
 }
 
 Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
+  // 每个写操作会被封装为一个 Writer
   Writer w(&mutex_);
   w.batch = my_batch;
   w.sync = options.sync;
@@ -1293,6 +1296,7 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
 
   // 加锁保护下面的 writers_ 队列操作
   MutexLock l(&mutex_);
+  // 新构造的 writer 入队.
   // 注意, 指针是内置类型, 当做为右值类型时支持 move 语义, 
   // 所以这里调用的就是 deque 的右值引用版本的 push_back
   writers_.push_back(&w); 
@@ -1440,7 +1444,8 @@ WriteBatch* DBImpl::BuildBatchGroup(Writer** last_writer) {
 // REQUIRES: mutex_ is held
 // REQUIRES: this thread is currently at the front of the writer queue
 // 
-// 当外部调用 db 写数据时, 该方法被调用负责根据实际情况创建新的 log 文件.
+// 当外部调用 db 写数据时, 该方法被调用负责根据实际情况创建新的 log 文件, 
+// 同时将当前 memtable 赋值给 imm_ 等待被写盘.
 // 
 // 调用该方法前提：
 // - mutex_ 被当前线程持有
@@ -1499,7 +1504,9 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       logfile_number_ = new_log_number;
       // 生成一个新的 log writer 负责写文件
       log_ = new log::Writer(lfile);
+      // 将满了的 mem_ 赋值给 imm_ 等待被落盘
       imm_ = mem_;
+      // 将 imm_ 存储到 has_imm_ 中
       has_imm_.Release_Store(imm_);
       // 创建一个与新 log 文件对应的 mmtable
       mem_ = new MemTable(internal_comparator_);
@@ -1635,7 +1642,7 @@ Status DB::Open(const Options& options, const std::string& dbname,
   VersionEdit edit;
   // Recover handles create_if_missing, error_if_exists
   bool save_manifest = false;
-  // 读取 log 文件恢复数据库
+  // 读取 current 文件, manifest 文件, sorted table 文件和 log 文件恢复数据库
   Status s = impl->Recover(&edit, &save_manifest);
   if (s.ok() && impl->mem_ == nullptr) {
     // Create new log and a corresponding memtable.

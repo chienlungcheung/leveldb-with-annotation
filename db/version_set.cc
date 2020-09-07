@@ -1009,6 +1009,7 @@ VersionSet::VersionSet(const std::string& dbname,
       descriptor_log_(nullptr),
       dummy_versions_(this),
       current_(nullptr) {
+  // 用一个 Version(未包含实际内容)替换当前 current_
   AppendVersion(new Version(this));
 }
 
