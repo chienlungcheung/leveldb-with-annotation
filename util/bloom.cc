@@ -47,9 +47,9 @@ class BloomFilterPolicy : public FilterPolicy {
     const size_t init_size = dst->size();
     dst->resize(init_size + bytes, 0); // resize dst, 空位置置为 0.
     dst->push_back(static_cast<char>(k_));  // Remember # of probes in filter 将探测次数 k 保存在 resize 后的 dst 的后一个字节
-    // dst【0, init_size - 1】 为 dst 原有的数据; 
-    // dst【init_size, init_size + bytes - 1】 用作布隆过滤器位图; 
-    // dst【init_size + bytes】 保存着布隆过滤器的探测次数 k. 
+    // dst[0, init_size - 1]  为 dst 原有的数据; 
+    // dst[init_size, init_size + bytes - 1]  用作布隆过滤器位图; 
+    // dst[init_size + bytes]  保存着布隆过滤器的探测次数 k. 
     char* array = &(*dst)[init_size];
     for (int i = 0; i < n; i++) { // 针对每个 key, 将其放入布隆过滤器
       // Use double-hashing to generate a sequence of hash values.

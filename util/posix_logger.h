@@ -80,7 +80,7 @@ class PosixLogger final : public Logger {
           (iteration == 0) ? stack_buffer : new char[dynamic_buffer_size]; // 第二次尝试堆内存)(此时 iteration 为 1)
 
       // Print the header into the buffer.
-      // 打印日志头, 包括“年月日-时分秒.微妙 线程ID”
+      // 打印日志头, 包括"年月日-时分秒.微妙 线程ID" 
       // 返回值不包含 snprintf 自动追加的结尾空字符, 应为 27 + kMaxThreadIdSize
       int buffer_offset = snprintf(
           buffer, buffer_size,

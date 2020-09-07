@@ -116,7 +116,8 @@ class MemTable {
   // SkipList, 存储 memtable 里的数据
   Table table_;
 
-  // No copying allowed 不允许拷贝和赋值 memtable 实例
+  // No copying allowed 
+  // 不允许拷贝和赋值 memtable 实例, 只能通过增加引用计数复用
   MemTable(const MemTable&);
   void operator=(const MemTable&);
 };

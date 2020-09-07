@@ -21,6 +21,7 @@ enum FileType {
   kLogFile,
   kDBLockFile,
   kTableFile,
+  // 即 MANIFEST 文件
   kDescriptorFile,
   kCurrentFile,
   kTempFile,
@@ -42,6 +43,8 @@ std::string SSTTableFileName(const std::string& dbname, uint64_t number);
 // Return the name of the descriptor file for the db named by
 // "dbname" and the specified incarnation number.  The result will be
 // prefixed with "dbname".
+// 
+// 根据 number 生成新的 MANIFEST 文件名, 然后增加一个 dbname 前缀, 构成完成的文件路径.
 std::string DescriptorFileName(const std::string& dbname, uint64_t number);
 
 // Return the name of the current file.  This file contains the name
@@ -79,6 +82,7 @@ bool ParseFileName(const std::string& filename,
 
 // Make the CURRENT file point to the descriptor file with the
 // specified number.
+// 创建一个临时文件, 将当前 MANIFEST 文件名(不含前缀路径)写到该文件, 然后将该临时文件重命名为 CURRENT.
 Status SetCurrentFile(Env* env, const std::string& dbname,
                       uint64_t descriptor_number);
 

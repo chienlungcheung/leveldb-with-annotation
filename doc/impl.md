@@ -223,7 +223,7 @@ So maybe even the sharding is not necessary on modern filesystems?
 
 测试结果显示差别不太大, 在现代文件系统上, 将文件分片到更多目录可能不是必须的. 
 
-## Recovery
+## Recovery 打开数据库时的恢复过程
 
 * Read CURRENT to find name of the latest committed MANIFEST
 * Read the named MANIFEST file
@@ -236,8 +236,8 @@ So maybe even the sharding is not necessary on modern filesystems?
 - 读取该 MANIFEST 文件内容
 - 清理过期的文件
 - 这一步我们可以打开全部 sstables, 但最好等会再打开
-- 将 log 文件块转换为一个新的 level-0 sstable
-- 将接下来的要写的数据写入一个新的 log 文件
+- 如果当前 log 文件未到大小上限则继续使用, 否则转换为一个新的 level-0 sstable 写入磁盘再重新创建一个 log 文件
+- 将接下来的要写的数据写入 log 文件
 
 ## Garbage collection of files
 

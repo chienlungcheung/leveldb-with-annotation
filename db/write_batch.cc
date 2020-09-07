@@ -138,6 +138,7 @@ void WriteBatchInternal::SetCount(WriteBatch* b, int n) {
  * @return 序列号
  */
 SequenceNumber WriteBatchInternal::Sequence(const WriteBatch* b) {
+  // rep 前 12 字节为 header, 包含 8 字节序列号和 4 字节记录数. 
   return SequenceNumber(DecodeFixed64(b->rep_.data()));
 }
 
@@ -206,7 +207,7 @@ class MemTableInserter : public WriteBatch::Handler {
 }  // namespace
 
 /**
- * 将 b 中包含的操作应用到 memtable 中
+ * 将数据填充到 memtable 中
  * @param b
  * @param memtable
  * @return

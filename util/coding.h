@@ -48,7 +48,7 @@ bool GetVarint32(Slice* input, uint32_t* value);
  */
 bool GetVarint64(Slice* input, uint64_t* value);
 /**
- * 该函数可以从指定空间解析一个格式为【长度(varint32 类型), 具体内容(内容大小即为前述的长度)】的数据记录, 
+ * 该函数可以从指定空间解析一个格式为[长度(varint32 类型), 具体内容(内容大小即为前述的长度)] 的数据记录, 
  * 成功解析的数据记录存放到 result.
  * @param input 要解析的数据记录所在空间
  * @param result 指向解析出的数据记录
@@ -135,7 +135,7 @@ inline const char* GetVarint32Ptr(const char* p,
                                   const char* limit,
                                   uint32_t* value) {
   if (p < limit) {
-    // reinterpret_cast “通常为操作数的位模式提供较低层的重新解释”也就是说将数据以二进制存在形式的重新解释;
+    // reinterpret_cast "通常为操作数的位模式提供较低层的重新解释" 也就是说将数据以二进制存在形式的重新解释;
     // static_cast 是将一些隐式类型转换显式地进行, 更加明确. 
     // 将指针 p 重新解释为 const unsigned char 指针类型, 并取出 p 指向的数据, 然后隐式地转换为 32 位的无符号整数类型, 
     // result 的值就是一个长度, 具体值为 0x0000000y

@@ -74,13 +74,11 @@ Status BuildTable(const std::string& dbname,
 
     if (s.ok()) {
       // Verify that the table is usable
-      // 检查 table 是否可用
+      // 确保刚写入的文件对应的 table 对象处于 table_cache_ 中.
       Iterator* it = table_cache->NewIterator(ReadOptions(),
                                               meta->number,
                                               meta->file_size);
-      // 如果 table 不可用, 则 it 为一个无效迭代器, 其对应状态也是 non-ok 的. 
       s = it->status();
-      // 无效迭代器也是可以删除的
       delete it;
     }
   }

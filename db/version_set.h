@@ -85,24 +85,31 @@ class Version {
   // Lookup the value for key.  If found, store it in *val and
   // return OK.  Else return a non-OK status.  Fills *stats.
   // REQUIRES: lock is not held
-  // 该结构体服务于下面的 Get 方法. 
+  // 该结构体用于在调用 Get 时保存待压实的文件及其 level 信息. 
   struct GetStats {
     FileMetaData* seek_file;
     int seek_file_level;
   };
-  // 结构体 GetStats 服务于下面紧接着的 Get 方法. 
-  // 从 level-0 开始一层一层查找 key 对应的 value. 
+  // 先查询当前在用的 mmtable, 如果没有则查询正在转换为 sorted table 的 mmtable 中寻找, 
+  // 如果没有则我们在磁盘上采用从底向上 level-by-level 的寻找目标 key. 
+  // 由于 level 越低数据越新, 因此, 当我们在一个较低的 level 找到数据的时候, 不用在更高的 levels 找了.
+  // 由于 level-0 文件之间可能存在重叠, 而且针对同一个 key, 后产生的文件数据更新所以先将包含 key 的文件找出来
+  // 按照文件号从大到小(对应文件从新到老)排序查找 key; 针对 level-1 及其以上 level, 由于每个 level 内
+  // 文件之间不存在重叠, 于是在每个 level 中直接采用二分查找定位 key.
+  // 
   // 当查询一个 key 时, 如果找到了对应的 value, 则将 value 保存到 *val 指向的地址并且返回 OK; 
   // 否则, 返回一个  non-OK. 
-  // 前提： 调用该方法之前必须未持有锁. todo 这个前提不知道是不是写错了. 
+  // 前提： 调用该方法之前必须未持有锁(调用前 db 会释放持有的锁, 具体见 DBImpl::Get). 
   Status Get(const ReadOptions&, const LookupKey& key, std::string* val,
              GetStats* stats);
 
   // Adds "stats" into the current state.  Returns true if a new
   // compaction may need to be triggered, false otherwise.
   // REQUIRES: lock is held
-  // 与压实有关. todo 为啥这么干不清楚, 看用法是调用完了 Get 后调用 UpdateStats.
-  // 将 stats 增加到当前状态中. 如果需要触发一个压实, 则返回 true; 否则返回 false. 
+  // 
+  // 如果上次调用 Get 查询感知到疑似需要进行压实, 则此处进一步检查确定是否触发压实.
+  // 检查条件是 stats 的 allowed_seeks 是否降为 0.
+  // 如果需要触发一个压实, 则返回 true; 否则返回 false. 
   // 前提：调用该方法前必须已经持有锁. 
   bool UpdateStats(const GetStats& stats);
 
@@ -146,10 +153,16 @@ class Version {
   // Return the level at which we should place a new memtable compaction
   // result that covers the range [smallest_user_key,largest_user_key].
   //
+  // 该方法负责为一个 memtable 在当前 level 架构(保存在当前 version 中)找一个落脚的 level. 
+  // 如果该 memtable 与 level-0 文件有重叠, 则放到 level-0; 否则, 它的判断条件就从从 level-1 开始寻找, 
+  // 主要是借用了压实磁盘 level 某个文件
+  // 时生成新文件的判断条件之二. "在合并 level-L 和 level-(L+1) 文件时生成新文件条件之一是达到了 2MB, 条件二是
+  // 即如果 level-L 和 level-(L+2) 重叠文件超过 10 个".
+  // 
   // 一个 memtable 对应一个 [smallest_user_key,largest_user_key] 区间, 
   // 我们将该 memtable 构造成一个 Table 文件后, 需要为该文件寻找一个落脚的 level. 
   // 该方法所作的即是依据与区间 [smallest_user_key,largest_user_key] 的重叠情况获取可以存储对应 Table 文件的 level. 
-  // 具体选取过错与压实策略有关. 
+  // 具体选取过错与压实策略有关.
   int PickLevelForMemTableOutput(const Slice& smallest_user_key,
                                  const Slice& largest_user_key);
 
@@ -192,7 +205,7 @@ class Version {
   int refs_;                    // Number of live refs to this version
 
   // List of files per level
-  // 每个 Version 都保存着 db 每个 level 的文件元数据链表
+  // 核心成员, 该成员保存了当前最新的 level 架构信息, 即 db 每个 level 的文件元数据链表
   std::vector<FileMetaData*> files_[config::kNumLevels];
 
   // Next file to compact based on seek stats.
@@ -203,9 +216,9 @@ class Version {
   // Level that should be compacted next and its compaction score.
   // Score < 1 means compaction is not strictly needed.  These fields
   // are initialized by Finalize().
-  // 压实分数, 小于 1 意味着压实不是很需要. 由 Finalize() 初始化. 
+  // 压实分数, 小于 1 意味着压实不是很需要. 由 Finalize() 计算. 
   double compaction_score_;
-  // 即将被压缩的 level . 由 Finalize() 初始化. 
+  // 下个待压实的 level. 由 Finalize() 计算. 
   int compaction_level_;
 
   explicit Version(VersionSet* vset)
@@ -225,7 +238,7 @@ class Version {
 
 // 一个 DBImpl 由一组 Versions 构成. 
 // 最新的 version 叫做 "current", 较老的 versions 可能也会被保留以为活跃的迭代器提供一致性视图. 
-// 每个 Version 跟踪每一个 level 的一组 Table 文件. 
+// Version 跟踪全部 level 及其文件. 
 // 全部 versions 集合由 VersionSet 维护. 
 // Version, VersionSet 都是兼容线程的, 但是在访问的时候需要外部的同步设施. 
 class VersionSet {
@@ -242,15 +255,18 @@ class VersionSet {
   // REQUIRES: *mu is held on entry.
   // REQUIRES: no other thread concurrently calls LogAndApply()
   //
-  // 将 *edit 内容施用到当前 version 来构成一个新的描述符, 这个描述符会被持久化保存同时会被作为新的当前 version 进行安装. 
+  // 将 *edit 内容和当前 version 内容合并构成一个新的 version, 然后将这个
+  // 新 version 内容序列化为一条日志写到新建的 manifest 文件, 同时将该 manifest
+  // 文件名写入 current 文件. 最后把新的 version 替换当前 version.
   // 前提：*mu 在进入方法之前就被持有了. 
   // 前提：没有其它线程并发调用该方法. 
   Status LogAndApply(VersionEdit* edit, port::Mutex* mu)
       EXCLUSIVE_LOCKS_REQUIRED(mu);
 
   // Recover the last saved descriptor from persistent storage.
-  //
-  // 从持久化存储恢复上一个保存的描述符
+  // 该方法负责从最后一个 MANIFEST 文件解析内容出来与当前 Version 保存的 level 架构合并保存到一个
+  // 新建的 Version 中, 然后将这个新的 version 作为当前的 version.
+  // 参数是输出型的, 负责保存一个指示当前 MANIFEST 文件是否可以续用.
   Status Recover(bool *save_manifest);
 
   // Return the current manifest file number
@@ -364,8 +380,9 @@ class VersionSet {
   // Add all files listed in any live version to *live.
   // May also mutate some internal state.
   //
-  // 将任意活跃的 version 中的全部文件添加到 *live 中. 
-  // 可能会修改一些内部状态. 
+  // 从旧到新遍历 version(因为新 version 是其前一个 version 合并 versionedit 构造的), 
+  // 在每个 version 中从低到高遍历 level(针对同样的 key, level 越低其对应数据越新),
+  // 将 level 中的文件都插入到集合 live 中.
   void AddLiveFiles(std::set<uint64_t>* live);
 
   // Return the approximate offset in the database of the data for
@@ -407,7 +424,7 @@ class VersionSet {
   // Save current contents to *log
   Status WriteSnapshot(log::Writer* log);
 
-  // 每个 VersionSet 包含一组 Version, 这里是将 Version 加入到该 VersionSet 中,
+  // 每个 VersionSet 包含一组 Version, 这里是将新创建的 Version 追加到该 VersionSet 的双向链表中.
   // 具体操作为将 v 插入到双向循环链表, 且位于 dummy_versions_ 前面. 
   void AppendVersion(Version* v);
 
@@ -423,16 +440,19 @@ class VersionSet {
   uint64_t prev_log_number_;  // 0 or backing store for memtable being compacted
 
   // Opened lazily
+  // 当前 MANIFEST 文件
   WritableFile* descriptor_file_;
+  // MANIFEST 文件格式同 log 文件, 所以写入方法就复用了. 其每条日志就是一个序列化后的 VersionEdit.
   log::Writer* descriptor_log_;
   // 属于该 VersionSet 的 Version 都会被维护到一个双向循环链表中, 
   // 而且新加入的 Version 都会插入到 dummy_versions_ 前面. 
   Version dummy_versions_;  // Head of circular doubly-linked list of versions.
-  // 指向最新加入的 Version
+  // 指向当前 Version
   Version* current_;        // == dummy_versions_.prev_
 
   // Per-level key at which the next compaction at that level should start.
   // Either an empty string, or a valid InternalKey.
+  // 记录了每个 level 各自对应的下次压实的起始 key
   std::string compact_pointer_[config::kNumLevels];
 
   // No copying allowed
@@ -498,7 +518,7 @@ class Compaction {
   // Returns true iff we should stop building the current output
   // before processing "internal_key".
   //
-  // 当且仅当我们在处理参数 “internal_key” 之前应该停止构建当前输出时返回 true
+  // 当且仅当我们在处理参数 "internal_key"  之前应该停止构建当前输出时返回 true
   bool ShouldStopBefore(const Slice& internal_key);
 
   // Release the input version for the compaction, once the compaction

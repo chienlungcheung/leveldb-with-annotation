@@ -12,7 +12,7 @@
 namespace leveldb {
 
 // 将 data 处数据转换为 Slice 并返回. 
-// data 存储的数据的格式为 【varint32 格式的数据长度 len, len 个字节的数据]
+// data 存储的数据的格式为 [varint32 格式的数据长度 len, len 个字节的数据]
 static Slice GetLengthPrefixedSlice(const char* data) {
   uint32_t len;
   const char* p = data;

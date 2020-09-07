@@ -471,7 +471,7 @@ class Compaction {
   // Returns true iff we should stop building the current output
   // before processing "internal_key".
   //
-  // 当且仅当我们在处理参数 “internal_key” 之前应该停止构建当前输出时返回 true
+  // 当且仅当我们在处理参数 "internal_key"  之前应该停止构建当前输出时返回 true
   bool ShouldStopBefore(const Slice& internal_key);
 
   // Release the input version for the compaction, once the compaction

@@ -259,7 +259,7 @@ class LEVELDB_EXPORT Env {
 
 // A file abstraction for reading sequentially through a file
 //
-// 该类是一个文件抽象, 用于顺序读取文件
+// 该类是一个文件抽象, 用于顺序读取文件(这个类竟然没有 close 方法)
 class LEVELDB_EXPORT SequentialFile {
  public:
   SequentialFile() = default;
@@ -388,7 +388,7 @@ class LEVELDB_EXPORT FileLock {
 // 该__attribute__属性可以给被声明的函数加上类似printf或者scanf的特征, 它可以使编译器检查函数声明和函数实际调用参数之间的格式化字符串是否匹配. 该功能十分有用, 尤其是处理一些很难发现的bug. 
 // format的语法格式为：
 // format (archetype, string-index, first-to-check)
-//    format属性告诉编译器, 按照printf, scanf, strftime或strfmon的参数表格式规则对该函数的参数进行检查. “archetype”指定是哪种风格; “string-index”指定传入函数的第几个参数是格式化字符串; “first-to-check”指定从函数的第几个参数开始按上述规则进行检查
+//    format属性告诉编译器, 按照printf, scanf, strftime或strfmon的参数表格式规则对该函数的参数进行检查. "archetype" 指定是哪种风格; "string-index" 指定传入函数的第几个参数是格式化字符串; "first-to-check" 指定从函数的第几个参数开始按上述规则进行检查
 void Log(Logger* info_log, const char* format, ...)
 #   if defined(__GNUC__) || defined(__clang__)
     __attribute__((__format__ (__printf__, 2, 3)))

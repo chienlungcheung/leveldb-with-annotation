@@ -78,9 +78,11 @@ std::string OldInfoLogFileName(const std::string& dbname) {
 //    dbname/LOG.old
 //    dbname/MANIFEST-[0-9]+
 //    dbname/[0-9]+.(log|sst|ldb)
+// 解析 filename, 将其中数字部分存储到 number 中(若文件名非数字则为 0), 将文件类型保存到 type 中.
 bool ParseFileName(const std::string& filename,
                    uint64_t* number,
                    FileType* type) {
+  // 将 filename 复制到 rest 中
   Slice rest(filename);
   if (rest == "CURRENT") {
     *number = 0;
@@ -131,9 +133,12 @@ Status SetCurrentFile(Env* env, const std::string& dbname,
   Slice contents = manifest;
   assert(contents.starts_with(dbname + "/"));
   contents.remove_prefix(dbname.size() + 1);
+  // 构造一个临时文件名
   std::string tmp = TempFileName(dbname, descriptor_number);
+  // 将当前 MANIFEST 文件名写到临时文件
   Status s = WriteStringToFileSync(env, contents.ToString() + "\n", tmp);
   if (s.ok()) {
+    // 写成功后将临时文件的名称改为 CURRENT
     s = env->RenameFile(tmp, CurrentFileName(dbname));
   }
   if (!s.ok()) {

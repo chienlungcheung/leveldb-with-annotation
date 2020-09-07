@@ -118,7 +118,7 @@ TwoLevelIterator::~TwoLevelIterator() {
 // 根据 target 将 index_iter 和 data_iter 移动到对应位置
 void TwoLevelIterator::Seek(const Slice& target) {
   // 因为 index block 每个数据项的 key 是对应 data block 中最大的那个 key, 
-  // 所以 index block 数据项也是有序的, 不过比较“宏观”. 
+  // 所以 index block 数据项也是有序的, 不过比较"宏观" . 
   index_iter_.Seek(target); // 先找到目标 data block
   InitDataBlock();
   if (data_iter_.iter() != nullptr) data_iter_.Seek(target); // 然后在目标 data block 找到目标数据项

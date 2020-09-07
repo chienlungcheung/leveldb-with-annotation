@@ -157,9 +157,9 @@ power to save its memory in the event of a power failure.
 
 ## 写性能
 
-“fill”基准测试创建了一个全新的数据库, 以顺序(下面 seq 结尾者)或者随机(下面 random 结尾者)方式. 
-“fillsync”基准测试每次写操作都将数据从操作系统冲刷到磁盘; 其它的操作会将数据保存在系统中一段时间. 
-“overwrite”基准测试做随机写, 这些操作会更新数据库中已有的键. 
+"fill" 基准测试创建了一个全新的数据库, 以顺序(下面 seq 结尾者)或者随机(下面 random 结尾者)方式. 
+"fillsync" 基准测试每次写操作都将数据从操作系统冲刷到磁盘; 其它的操作会将数据保存在系统中一段时间. 
+"overwrite" 基准测试做随机写, 这些操作会更新数据库中已有的键. 
 
     fillseq      :       1.765 micros/op;   62.7 MB/s
     fillsync     :     268.409 micros/op;    0.4 MB/s (10000 ops)

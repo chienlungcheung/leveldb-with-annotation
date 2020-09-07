@@ -19,7 +19,7 @@ void EncodeFixed32(char* buf, uint32_t value) {
 }
 
 // 将 64 位长的 value 按照字节序写入到 buf 所在位置
-// 注意, 该编码格式是“类”小端模式, 即 buf 低位字节要存储 value 的低位字节
+// 注意, 该编码格式是"类" 小端模式, 即 buf 低位字节要存储 value 的低位字节
 void EncodeFixed64(char* buf, uint64_t value) {
   // 如果机器是小端, 机器低位内存存储的是 value 低位字节, 直接拷贝即可实现 value 的低字节到高字节, 按照从 buf 低字节到高字节分布
   if (port::kLittleEndian) {
@@ -261,7 +261,7 @@ const char* GetLengthPrefixedSlice(const char* p, const char* limit,
 }
 
 /**
- * 该函数可以从指定空间解析一条格式为 【长度(varint32 类型), 具体数据(内容大小即为前述的长度)】 的数据记录, 
+ * 该函数可以从指定空间解析一条格式为 [长度(varint32 类型), 具体数据(内容大小即为前述的长度)]  的数据记录, 
  * 成功解析的具体数据存放到 result.
  * @param input 要解析的数据记录所在空间
  * @param result 指向解析出的具体数据

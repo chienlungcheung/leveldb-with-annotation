@@ -18,7 +18,8 @@ class VersionSet;
 struct FileMetaData {
   // 文件引用计数
   int refs;
-  // 文件压实之前允许的查询次数
+  // 针对每次查询涉及多个文件, 而且该文件位于第一个, 那么这就是需要进行合并压实的信号.
+  // 所以为了实现该功能, 需要该字段记录出现前述情况的次数, 达到阈值就启动压实.
   int allowed_seeks;          // Seeks allowed until compaction
   // 文件号码
   uint64_t number;
@@ -32,6 +33,8 @@ struct FileMetaData {
   FileMetaData() : refs(0), allowed_seeks(1 << 30), file_size(0) { }
 };
 
+// 该类是 MANIFEST 文件的一行日志的反序列化形式.
+// 负责记录 level 架构中新增/删除的文件及其所属的 level.
 class VersionEdit {
  public:
   VersionEdit() { Clear(); }
@@ -65,7 +68,7 @@ class VersionEdit {
     has_last_sequence_ = true;
     last_sequence_ = seq;
   }
-  // 设置压实指针
+  // 设置指定 level 下次压实的起始 key
   void SetCompactPointer(int level, const InternalKey& key) {
     compact_pointers_.push_back(std::make_pair(level, key));
   }
@@ -74,6 +77,7 @@ class VersionEdit {
   // REQUIRES: This version has not been saved (see VersionSet::SaveTo)
   // REQUIRES: "smallest" and "largest" are smallest and largest keys in file
   //
+  // 当新增一个文件时, 将其元信息记录到 version_edit 的 new_files_ 队列中.
   // 以指定的文件号码将文件保存到指定的 level. 
   // 前提：该 version 没有被保存过(见 VersionSet::SaveTo)
   // 前提："smallest" 和 "largest" 分别是文件中最小的 key 和最大的 key
@@ -90,7 +94,7 @@ class VersionEdit {
   }
 
   // Delete the specified "file" from the specified "level".
-  //
+  // 将要删除的文件对应元信息保存到 deleted_files_ 集合中.
   // 从指定的 level 删除指定的 file
   void DeleteFile(int level, uint64_t file) {
     deleted_files_.insert(std::make_pair(level, file));
@@ -121,6 +125,7 @@ class VersionEdit {
   bool has_next_file_number_;
   bool has_last_sequence_;
 
+// 记录每个 level 下次压实的起始 key
   std::vector< std::pair<int, InternalKey> > compact_pointers_;
   // 待删除文件列表
   DeletedFileSet deleted_files_;

@@ -18,7 +18,7 @@ namespace leveldb {
 
 class Env;
 
-// 借助底层的 cache_ 实现了一个缓存, key 为 table 文件的 file_number, value 为 Table 对象的一个封装. 
+// 借助底层的 LRU cache_ 实现了一个缓存, key 为 table 文件的 file_number, value 为 Table 对象的一个封装. 
 class TableCache {
  public:
   TableCache(const std::string& dbname, const Options& options, int entries);
@@ -32,6 +32,7 @@ class TableCache {
   // by the cache and should not be deleted, and is valid for as long as the
   // returned iterator is live.
   //
+  // 从 table_cache_ 根据 file_number 查找其对应的 table 对象, 返回其指针.
   // 针对给定的 file_number(对应的文件长度也必须恰好是 file_size 字节数), 返回一个与其对应 table 的 iterator. 
   // 如果 tableptr 非空, 设置 *tableptr 指向返回的 iterator 底下的 Table 对象. 
   // 返回的 *tableptr 对象由 cache 所拥有, 所以用户不要删除它; 而且只要 iterator 还活着, 该对象即有效. 

@@ -234,6 +234,9 @@ FIRST、MIDDLE、LAST 这三个类型用于被分割成多个 fragments(典型�
 **B** 会被分割为 3 个 fragments：第一个 fragment 占据第一个 block 剩余空间, 共存入 31761 - 7 = 31754, 剩余 65516; 第二个 fragment 占据第二个 block 的全部空间, 存入 32768 - 7 = 32761, 剩余 65516 - 32761 = 32755; 第三个 fragment 占据第三个 block 的起始空间共 7 + 32755 = 32762. 所以最后在第三个 block 剩下 32768 - 32762 = 6 个字节, 这几个字节会被填充 0 作为 trailer. 
 
 **C** 将会被作为 FULL 类型的 record 存储到第四个 block 中. 
+
+MANIFEST 文件的格式同 log 文件, 只是记录的具体内容不同, 前者记录的针对 level 架构的文件级别变更(新增/删除), 后者记录的是用户数据 key-value 变更.
+
 #### log 文件格式的好处
 
 log 文件格式的好处是(总结一句话就是容易划分边界)：
@@ -265,18 +268,63 @@ bool leveldb::log::Reader::ReadRecord(leveldb::Slice *record, std::__cxx11::stri
 
 该方法负责从 log 文件读取内容并反序列化为 Record. 该方法会在 db 的 `Open` 方法中调用, 负责将磁盘上的 log 文件转换为内存中 mmtable. 其它数据库恢复场景也会用到该方法.
 
+#### 与 log 文件配套的 mmtable
+##### 结构
+它的本质就是一个 SkipList.
+##### 用途
+我们已经知道, 每个 log 文件在内存有一个对应的 mmtable, 它和正在压实的 mmtable 以及磁盘上的各个 level 包含的文件构成了数据全集. 所以当调用 DB 的 `Get` 方法查询某个 key 的时候, 具体步骤是这样的(具体实现位于 `leveldb::Status leveldb::Version::Get(const leveldb::ReadOptions &options, const leveldb::LookupKey &k, std::__cxx11::string *value, leveldb::Version::GetStats *stats)`, DB 的 `Get` 方法会调用前述实现.):
+- 1 先查询当前在用的 mmtable, 查到返回, 未查到下一步
+- 2 查询正在转换为 sorted table 的 mmtable 中寻找, 查到返回, 未查到下一步 
+- 3 在磁盘上采用从底向上 level-by-level 的寻找目标 key. 
+  - 由于 level 越低数据越新, 因此, 当我们在一个较低的 level 找到数据的时候, 不用在更高的 levels 找了.
+  - 由于 level-0 文件之间可能存在重叠, 而且针对同一个 key, 后产生的文件数据更新所以先将包含 key 的文件找出来按照文件号从大到小(对应文件从新到老)排序查找 key; 针对 level-1 及其以上 level, 由于每个 level 内文件之间不存在重叠, 于是在每个 level 中直接采用二分查找定位 key.
+
 ### sorted table 文件
 
 sorted table(*.ldb) 文件就是 leveldb 的数据库文件了. 每个 sorted table 文件保存着按 key 排序的一系列数据项. 每个数据项要么是一个与某个 key 对应的 value, 要么是某个 key 的删除标记. (删除标记其它地方又叫墓碑消息, 用于声明时间线上在此之前的同名 key 对应的记录都失效了, 后台线程负责对这类记录进行压实, 即拷贝到另一个文件时物理删除这类记录.). 注意, leveldb 是一个 append 类型而非 MySQL 那种 in-place 修改的数据库.
 
 sorted tables 文件被组织成一系列 levels. 一个 log 文件生成的对应 sorted table 文件会被放到一个特殊的 **young** level(也被叫做 level-0). 当 young 文件数目超过某个阈值(当前是 4), 全部 young 文件就会和 level-1 与之重叠的全部文件进行合并, 进而生成一系列新的 level-1 文件(每 2MB 数据就会生成一个新的 level-1 文件). 
 
-young level 的文件之间可能存在键区间重叠, 但是其它每层 level 内部文件之间是不存在重叠情况的. 我们下面来说下 level-1 及其以上的 level 的文件如何合并. 当 level-L (L >= 1)的文件总大小超过了 10^L MB(即 level-1 超过了 10MB, level-2 超过了 100MB, ...), 此时一个 level-L 文件就会和 level-(L+1) 中与自己键区间重叠的全部文件进行合并, 然后为 level-(L+1) 生成一组新的文件. 这些合并操作可以实现将 young level 中新的 updates 一点一点搬到最高的那层 level, 这个迁移过程使用的都是块读写(最小化了昂贵的 seek 操作的时间消耗). 
+young level 的文件之间可能存在键区间重叠, 但是其它每层 level 内部文件之间是不存在重叠情况的. 我们下面来说下 level-1 及其以上的 level 的文件如何合并. 当 level-L (L >= 1)的文件总大小超过了 $10^L$ MB(即 level-1 超过了 10MB, level-2 超过了 100MB, ...), 此时一个 level-L 文件就会和 level-(L+1) 中与自己键区间重叠的全部文件进行合并, 然后为 level-(L+1) 生成一组新的文件. 这些合并操作可以实现将 young level 中新的 updates 一点一点搬到最高的那层 level, 这个迁移过程使用的都是块读写(最小化了昂贵的 seek 操作的时间消耗). 
 
 ### MANIFEST 文件
 
-MANIFEST 文件可以看作 leveldb 存储元数据的地方. 它列出了每一个 level 及其包含的全部 sorted table 文件, 每个 sorted table 文件对应的键区间, 以及其它重要的元数据. 每当重新打开数据库的时候, 就会创建一个新的 MANIFEST 文件(文件名中嵌有一个新生成的数字). MANIFEST 文件被格式化成日志文件, 针对它所服务的数据的变更都会被追加到该文件后面. 比如每当某个 level 发生文件新增或者删除操作时, 就会有一条日志被追加到 MANIFEST 中. 
+MANIFEST 文件可以看作 leveldb 存储元数据的地方. 它列出了每一个 level 及其包含的全部 sorted table 文件, 每个 sorted table 文件对应的键区间, 以及其它重要的元数据. 每当重新打开数据库的时候, 就会创建一个新的 MANIFEST 文件(文件名中嵌有一个新生成的数字). MANIFEST 文件被格式化成形同 log 文件的格式, 针对它所服务的数据的变更都会被追加到该文件后面. 比如每当某个 level 发生文件新增或者删除操作时, 就会有一条日志被追加到 MANIFEST 中. 
+
+MANIFEST 文件在实现时又叫 descriptor 文件, 文件格式同 log 文件, 所以写入方法就复用了. 其每条日志就是一个序列化后的 `leveldb::VersionEdit`. 每次针对 level 架构有文件增删时都要写日志到 manifest 文件.
+
+#### 与 MANIFEST 相关的数据结构之 VersionSet
+
+每个 db 都有一个 `class leveldb::VersionSet` 实例, 它保存了 db 当前的 level 架构视图(具体存储结构为其 Version 成员). MANIFEST 文件可以看作是它所维护的信息的反映. 它的重要方法有:
+- `VersionSet::Recover` 负责在打开数据库时将 MANIFEST 文件反序列化构造 level 架构视图, 这个过程会依赖 VersionEdit 类.
+- `VersionSet::LogAndApply` 负责将当前 VersionEdit 和当前 Version 进行合并, 然后序列化为一条日志记录到 MANIFEST 文件. 最后把新的 version 替换当前 version.
+
+#### 与 MANIFEST 相关的 Version 结构
+
+`class leveldb::Version` 是 leveldb 数据库 level 架构的内存表示, 它存储了每一个 level 及其全部的文件信息(文件名, 键范围等等). 每次调用 db 的 Get 方法在 memtable 找不到目标 key 时就会到各个 level 的文件去搜寻, 这个搜寻过程所依赖的就是数据库 VersionSet(下面介绍) 保存的当前 Version 存储的 level 架构信息进行的, 具体实现见 `leveldb::Version::Get` 方法.
+
+当条件满足时, VersionSet 会将当前 Version 和当前 VesionEdit 合并生成一个新的 Version 替换当前 Version.
+
+
+#### 与 MANIFEST 相关的 VersionEdit
+
+MANIFEST 文件的每一条日志就是一个序列化的 `class leveldb::VersionEdit`. 它可以看作一个 on-fly 的 Version. 它会记录 db 运行过程中删除的文件列表和新增的文件列表.
 
 ### CURRENT 文件
 
 CURRENT 文件是一个简单的文本文件. 由于每次重新打开数据库都会生成一个 MANIFEST 文件, 所以需要一个地方记录最新的 MANIFEST 文件是哪个, CURRENT 就干这个事情, 它相当于一个指针, 其内容即是当前最新的 MANIFEST 文件的名称. 
+
+### 文件位置与命名
+
+各类型文件位置与命名如下:
+
+```bash
+dbname/CURRENT
+dbname/LOCK
+dbname/LOG
+dbname/LOG.old
+dbname/MANIFEST-[0-9]+
+dbname/[0-9]+.(log|sst|ldb)
+```
+
+其中 dbname 为用户指定.

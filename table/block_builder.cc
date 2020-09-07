@@ -99,7 +99,7 @@ void BlockBuilder::Add(const Slice& key, const Slice& value) {
     // 否则, 新增一个 restart point, 而且该 restart 的第一个数据项的 key 不进行压缩. 
     // - restart 就是一个 offset, 具体值为当前 buffer 所占空间大小. 
     // - restart 后第一个数据项的 key 不进行压缩, 即不计算与前一个 key 的公共前缀了, 而是把这个 key 整个保存起来, 
-    //  但是本 “restart” 段, 从这个 key 开始后面的 keys 都要进行压缩. 
+    //  但是本 "restart"  段, 从这个 key 开始后面的 keys 都要进行压缩. 
     // Restart compression
     restarts_.push_back(buffer_.size());
     counter_ = 0;

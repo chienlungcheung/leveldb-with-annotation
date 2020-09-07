@@ -64,7 +64,7 @@ class BytewiseComparatorImpl : public Comparator {
     // Find first character that can be incremented
     // 如果 key 每个字节都是 0xff, 则原样返回 key, 因为它的最短的后继字符串就是它自己. 
     // 找到 key 中第一个不是 0xff 的字节, 将其递增 1, 然后从此处截断 key, 比如, 
-    // 若 key 为 【0xff,0x01,0x12】, 则处理完毕后, key 变为 【0xff,0x02】
+    // 若 key 为 [0xff,0x01,0x12] , 则处理完毕后, key 变为 [0xff,0x02] 
     size_t n = key->size();
     for (size_t i = 0; i < n; i++) {
       const uint8_t byte = (*key)[i];

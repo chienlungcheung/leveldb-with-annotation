@@ -386,7 +386,7 @@ benefit in using blocks smaller than one kilobyte, or larger than a few
 megabytes. Also note that compression will be more effective with larger block
 sizes.
 
-leveldb 把相邻的 keys 组织在同一个 block 中(具体见 [sstable 文件格式](table_format.md)), 而且 block 是 leveldb 把数据从内存到转移到持久化存储和从持久化存储转移到内存的基本单位. 默认的 block 大约为 4KB, 压缩前. 经常处理大块数据的应用可能希望把这个值调大, 而针对数据做“点读”的应用可能希望这个值小一点, 这样性能可能会更高一些. 但是, 没有证据表明该值小于 1KB 或者大于几个 MB 的时候性能会表现更好. 同时要注意, 针对大的 block size, 进行压缩效率会更高. 
+leveldb 把相邻的 keys 组织在同一个 block 中(具体见 [sstable 文件格式](table_format.md)), 而且 block 是 leveldb 把数据从内存到转移到持久化存储和从持久化存储转移到内存的基本单位. 默认的 block 大约为 4KB, 压缩前. 经常处理大块数据的应用可能希望把这个值调大, 而针对数据做"点读" 的应用可能希望这个值小一点, 这样性能可能会更高一些. 但是, 没有证据表明该值小于 1KB 或者大于几个 MB 的时候性能会表现更好. 同时要注意, 针对大的 block size, 进行压缩效率会更高. 
 
 ### Compression
 

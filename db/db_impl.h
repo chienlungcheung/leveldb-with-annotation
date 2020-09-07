@@ -89,7 +89,8 @@ class DBImpl : public DB {
   // Compact the in-memory write buffer to disk.  Switches to a new
   // log-file/memtable and writes a new descriptor iff successful.
   // Errors are recorded in bg_error_.
-  // 将内存中的 memtable 转换为 Table 文件并写入到磁盘中. 
+  //
+  // 将内存中的 memtable 转换为 sorted table 文件并写入到磁盘中. 
   // 当且仅当该方法执行成功后, 切换到一组新的 log-file/memetable 组合并且写一个新的描述符. 
   // 如果执行失败, 则将错误记录到 bg_error_. 
   void CompactMemTable() EXCLUSIVE_LOCKS_REQUIRED(mutex_);
@@ -142,10 +143,12 @@ class DBImpl : public DB {
   port::Mutex mutex_;
   port::AtomicPointer shutting_down_;
   port::CondVar background_work_finished_signal_ GUARDED_BY(mutex_);
+  // 当前在用的 mmtable
   MemTable* mem_;
-  // 正在被压实的 memtable
+  // 正在被压实的 memtable, 其对应 log 文件已经满了.
   MemTable* imm_ GUARDED_BY(mutex_);  // Memtable being compacted
   port::AtomicPointer has_imm_;       // So bg thread can detect non-null imm_
+  // 指向在写 log 文件
   WritableFile* logfile_;
   uint64_t logfile_number_ GUARDED_BY(mutex_);
   log::Writer* log_;
@@ -182,12 +185,12 @@ class DBImpl : public DB {
 
   // Per level compaction stats.  stats_[level] stores the stats for
   // compactions that produced data for the specified "level".
-  // 每个 level 的压实状态. 
+  // 每个 level 对应的的压实过程统计. 
   struct CompactionStats {
-    // 压实过程耗费的时间, 单位毫秒
+    // 记录所属 level 压实累计耗费的时间, 单位毫秒
     int64_t micros;
     int64_t bytes_read;
-    // 压实过程要写入的字节数
+    // 记录所属 level 压实累计写入的字节数
     int64_t bytes_written;
 
     CompactionStats() : micros(0), bytes_read(0), bytes_written(0) { }

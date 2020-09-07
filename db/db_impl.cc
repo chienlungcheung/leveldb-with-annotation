@@ -117,6 +117,8 @@ Options SanitizeOptions(const std::string& dbname,
   return result;
 }
 
+// 计算 table_cache_ 容量.
+// 从计算过程可以看出, 这个 cache 还是很大的, 几乎把磁盘上的 sorted tables 文件都在内存中保存了一份.
 static int TableCacheSize(const Options& sanitized_options) {
   // Reserve ten files or so for other uses and give the rest to TableCache.
   return sanitized_options.max_open_files - kNumNonTableCacheFiles;
@@ -178,6 +180,8 @@ DBImpl::~DBImpl() {
   }
 }
 
+// 初始化一个 version_edit 对象, 创建 MANIFEST 文件, 并将前述 version_edit 序列化为一条日志写入到该文件;
+// 然后创建 CURRENT 文件, 将 MANIFEST 文件名写入到 CURRENT 文件中.
 Status DBImpl::NewDB() {
   VersionEdit new_db;
   new_db.SetComparatorName(user_comparator()->Name());
@@ -185,6 +189,7 @@ Status DBImpl::NewDB() {
   new_db.SetNextFile(2);
   new_db.SetLastSequence(0);
 
+  // 创建 MANIFEST 文件
   const std::string manifest = DescriptorFileName(dbname_, 1);
   WritableFile* file;
   Status s = env_->NewWritableFile(manifest, &file);
@@ -192,6 +197,7 @@ Status DBImpl::NewDB() {
     return s;
   }
   {
+    // 将当前 version_edit 内容序列化为一条日志记录到 MANIFEST 文件
     log::Writer log(file);
     std::string record;
     new_db.EncodeTo(&record);
@@ -201,6 +207,7 @@ Status DBImpl::NewDB() {
     }
   }
   delete file;
+  // 将 MANIFEST 文件名写到 CURRENT 文件
   if (s.ok()) {
     // Make "CURRENT" file that points to the new manifest file.
     s = SetCurrentFile(env_, dbname_, 1);
@@ -276,27 +283,38 @@ void DBImpl::DeleteObsoleteFiles() {
     }
   }
 }
-
+// 该方法用于刚打开数据库时从磁盘读取数据在内存建立 level 架构.
+// - 读取 CURRENT 文件(不存在则新建)找到最新的 MANIFEST 文件(不存在则新建)的名称
+// - 读取该 MANIFEST 文件内容
+// - 清理过期的文件
+// - 这一步我们可以打开全部 sstables, 但最好等会再打开
+// - 将 log 文件块转换为一个新的 level-0 sstable
+// - 将接下来的要写的数据写入一个新的 log 文件
 Status DBImpl::Recover(VersionEdit* edit, bool *save_manifest) {
   mutex_.AssertHeld();
 
   // Ignore error from CreateDir since the creation of the DB is
   // committed only when the descriptor is created, and this directory
   // may already exist from a previous failed creation attempt.
+  // 创建数据库(一个目录代表一个数据库)
   env_->CreateDir(dbname_);
   assert(db_lock_ == nullptr);
+  // 锁定该目录
   Status s = env_->LockFile(LockFileName(dbname_), &db_lock_);
   if (!s.ok()) {
     return s;
   }
 
+  // 如果 CURRENT 文件(记录当前 MENIFEST 文件名称)不存在
   if (!env_->FileExists(CurrentFileName(dbname_))) {
     if (options_.create_if_missing) {
+      // 创建之
       s = NewDB();
       if (!s.ok()) {
         return s;
       }
     } else {
+      // 报错
       return Status::InvalidArgument(
           dbname_, "does not exist (create_if_missing is false)");
     }
@@ -307,6 +325,9 @@ Status DBImpl::Recover(VersionEdit* edit, bool *save_manifest) {
     }
   }
 
+  // 该方法负责从最后一个 MANIFEST 文件解析内容出来与当前 Version 保存的 level 架构合并保存到一个
+  // 新建的 Version 中, 然后将这个新的 version 作为当前的 version.
+  // 参数是输出型的, 负责保存一个指示当前 MANIFEST 文件是否可以续用.
   s = versions_->Recover(save_manifest);
   if (!s.ok()) {
     return s;
@@ -323,22 +344,31 @@ Status DBImpl::Recover(VersionEdit* edit, bool *save_manifest) {
   const uint64_t min_log = versions_->LogNumber();
   const uint64_t prev_log = versions_->PrevLogNumber();
   std::vector<std::string> filenames;
+  // 获取数据库目录下全部文件列表(后面会把 log 文件筛出来)存到 filenames 中
   s = env_->GetChildren(dbname_, &filenames);
   if (!s.ok()) {
     return s;
   }
+  // 从旧到新遍历 version, 在每个 version 中从低到高遍历 level,
+  // 将 level 中的文件都插入到集合 expected 中.
   std::set<uint64_t> expected;
   versions_->AddLiveFiles(&expected);
   uint64_t number;
   FileType type;
   std::vector<uint64_t> logs;
+  // 遍历数据库目录下全部文件, 筛选出
   for (size_t i = 0; i < filenames.size(); i++) {
+    // 解析文件类型
     if (ParseFileName(filenames[i], &number, &type)) {
       expected.erase(number);
+      // 若文件类型为 log, 且文件名(是一个数字)不小于当前在写入文件名或者等于当前正在转换为 mmtable 的文件名,
+      // 则将文该文件加入到恢复列表中.
       if (type == kLogFile && ((number >= min_log) || (number == prev_log)))
         logs.push_back(number);
     }
   }
+  // 若 versionset 中记录的文件多于从当前数据库目录中读取到的文件, 
+  // 则说明数据库目录有文件丢失, 数据库损坏.
   if (!expected.empty()) {
     char buf[50];
     snprintf(buf, sizeof(buf), "%d missing files; e.g.",
@@ -347,8 +377,11 @@ Status DBImpl::Recover(VersionEdit* edit, bool *save_manifest) {
   }
 
   // Recover in the order in which the logs were generated
+  // 将 logs 列表从旧到新排序, 逐个恢复.
   std::sort(logs.begin(), logs.end());
   for (size_t i = 0; i < logs.size(); i++) {
+    // 从旧到新逐个 log 文件恢复, 如果有 log 文件转换为 sorted table 文件(如大小到达阈值)落盘则
+    // 将 save_manifest 标记为 true, 表示需要写日志到 manifest 文件.
     s = RecoverLogFile(logs[i], (i == logs.size() - 1), save_manifest, edit,
                        &max_sequence);
     if (!s.ok()) {
@@ -368,6 +401,9 @@ Status DBImpl::Recover(VersionEdit* edit, bool *save_manifest) {
   return Status::OK();
 }
 
+// 读取 log 文件并将其转为 mmtable. 如果该 log 文件继续使用则将其对应 memtable 赋值到 mem_ 继续使用;
+// 否则将 log 文件对应 memtable 转换为 sorted table 文件写入磁盘, 同时标记 save_manifest 为 true,
+// 表示 level 架构变动需要记录文件变更到 manifest 文件.
 Status DBImpl::RecoverLogFile(uint64_t log_number, bool last_log,
                               bool* save_manifest, VersionEdit* edit,
                               SequenceNumber* max_sequence) {
@@ -405,6 +441,7 @@ Status DBImpl::RecoverLogFile(uint64_t log_number, bool last_log,
   // paranoid_checks==false so that corruptions cause entire commits
   // to be skipped instead of propagating bad information (like overly
   // large sequence numbers).
+  // 创建 log reader, 强制做校验和处理, 避免错误数据传递到其它操作
   log::Reader reader(file, &reporter, true/*checksum*/,
                      0/*initial_offset*/);
   Log(options_.info_log, "Recovering log #%llu",
@@ -416,6 +453,7 @@ Status DBImpl::RecoverLogFile(uint64_t log_number, bool last_log,
   WriteBatch batch;
   int compactions = 0;
   MemTable* mem = nullptr;
+  // 读取 log 文件并将其转为 mmtable
   while (reader.ReadRecord(&record, &scratch) &&
          status.ok()) {
     if (record.size() < 12) {
@@ -429,6 +467,7 @@ Status DBImpl::RecoverLogFile(uint64_t log_number, bool last_log,
       mem = new MemTable(internal_comparator_);
       mem->Ref();
     }
+    // 将数据填充到 mmtable
     status = WriteBatchInternal::InsertInto(&batch, mem);
     MaybeIgnoreError(&status);
     if (!status.ok()) {
@@ -441,11 +480,14 @@ Status DBImpl::RecoverLogFile(uint64_t log_number, bool last_log,
       *max_sequence = last_seq;
     }
 
+    // 如果 mmtable 太大了, 将其转为 sorted table 文件写入磁盘, 
+    // 同时将其对应的 table 对象放到 table_cache_ 缓存
     if (mem->ApproximateMemoryUsage() > options_.write_buffer_size) {
       compactions++;
       *save_manifest = true;
       status = WriteLevel0Table(mem, edit, nullptr);
       mem->Unref();
+      // 如果写入磁盘了, 那么对应的 memtable 就和磁盘数据重复了, 置空
       mem = nullptr;
       if (!status.ok()) {
         // Reflect errors immediately so that conditions like full
@@ -455,6 +497,7 @@ Status DBImpl::RecoverLogFile(uint64_t log_number, bool last_log,
     }
   }
 
+  // 读取完了, 释放指向 log 文件的指针
   delete file;
 
   // See if we should keep reusing the last log file.
@@ -466,8 +509,11 @@ Status DBImpl::RecoverLogFile(uint64_t log_number, bool last_log,
     if (env_->GetFileSize(fname, &lfile_size).ok() &&
         env_->NewAppendableFile(fname, &logfile_).ok()) {
       Log(options_.info_log, "Reusing old log %s \n", fname.c_str());
+      // 继续使用之前创建的最后一个 log 文件记录日志
       log_ = new log::Writer(logfile_, lfile_size);
       logfile_number_ = log_number;
+      // 为当前 log 文件重用(之前未写磁盘)或创建一个新的 mmtable;
+      // 重用 mem 后其必定被置为空.
       if (mem != nullptr) {
         mem_ = mem;
         mem = nullptr;
@@ -479,6 +525,7 @@ Status DBImpl::RecoverLogFile(uint64_t log_number, bool last_log,
     }
   }
 
+  // log 文件没有被重用, 将其对应 mmtable 转为 sorted table 文件写入磁盘
   if (mem != nullptr) {
     // mem did not get reused; compact it.
     if (status.ok()) {
@@ -491,13 +538,14 @@ Status DBImpl::RecoverLogFile(uint64_t log_number, bool last_log,
   return status;
 }
 
-// 将 mem 对应的 memtable 以 table 文件形式保存到磁盘并将其对应的元信息(level、filemeta 等)保存到 edit 中
+// 将 mem 对应的 memtable 以 table 文件形式保存到磁盘,
+// 并将本次变更对应的元信息(level、filemeta 等)保存到 edit 中
 Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
                                 Version* base) {
   mutex_.AssertHeld();
   const uint64_t start_micros = env_->NowMicros();
   FileMetaData meta;
-  // 为 memtable 对应的 table 文件生成一个文件号
+  // 为 memtable 对应的 table 文件生成一个文件 number
   meta.number = versions_->NewFileNumber();
   // 保护 number 对应的 table 文件, 避免在压实过程中被删除
   pending_outputs_.insert(meta.number);
@@ -510,7 +558,7 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
   {
     // 构造 Table 文件的时候与 mutex_ 要守护的成员变量无关, 可以解除锁定
     mutex_.Unlock();
-    // 基于 memtable 的迭代器 iter 构造一个 Table 文件
+    // 将 mmtable 序列化为一个 sorted table 文件并写入磁盘, 文件大小会被保存到 meta 中.
     s = BuildTable(dbname_, env_, options_, table_cache_, iter, &meta);
     // 构造完毕, 重新获取锁, 诸如 pending_outputs_ 需要 mutex_ 来守护
     mutex_.Lock();
@@ -534,7 +582,8 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
     const Slice min_user_key = meta.smallest.user_key();
     const Slice max_user_key = meta.largest.user_key();
     if (base != nullptr) {
-      // 为 [min_user_key, max_user_key] 对应的 Table 文件找一个落脚的 level
+      // 为 [min_user_key, max_user_key] 对应的 Table 文件找一个落脚的 level.
+      // 注意, leveldb 文件落盘就是直接写, 具体属于哪个 level, 包含的键区间, 另外记录到其它地方.
       level = base->PickLevelForMemTableOutput(min_user_key, max_user_key);
     }
     // 将 [min_user_key, max_user_key] 对应的 Table 文件元信息及其 level 记录到 edit 中
@@ -555,7 +604,7 @@ void DBImpl::CompactMemTable() {
   assert(imm_ != nullptr);
 
   // Save the contents of the memtable as a new Table
-  // 将内存中的 memtable 内容保存为 table 文件
+  // 将内存中的 memtable 内容保存为 sorted table 文件
   VersionEdit edit;
   // 获取当前 dbimpl 对应的最新 version
   Version* base = versions_->current();
@@ -1139,6 +1188,12 @@ int64_t DBImpl::TEST_MaxNextLevelOverlappingBytes() {
   return versions_->MaxNextLevelOverlappingBytes();
 }
 
+// 先查询当前在用的 mmtable, 如果没有则查询正在转换为 sorted table 的 mmtable 中寻找, 
+// 如果没有则我们在磁盘上采用从底向上 level-by-level 的寻找目标 key. 
+// 由于 level 越低数据越新, 因此, 当我们在一个较低的 level 找到数据的时候, 不用在更高的 levels 找了.
+// 由于 level-0 文件之间可能存在重叠, 而且针对同一个 key, 后产生的文件数据更新所以先将包含 key 的文件找出来
+// 按照文件号从大到小(对应文件从新到老)排序查找 key; 针对 level-1 及其以上 level, 由于每个 level 内
+// 文件之间不存在重叠, 于是在每个 level 中直接采用二分查找定位 key.
 Status DBImpl::Get(const ReadOptions& options,
                    const Slice& key,
                    std::string* value) {
@@ -1154,6 +1209,7 @@ Status DBImpl::Get(const ReadOptions& options,
 
   MemTable* mem = mem_;
   MemTable* imm = imm_;
+  // versionset 的当前 Version 保存了目前最新的 level 架构信息(每个 level 各自包含了哪些文件覆盖了哪些键区间)
   Version* current = versions_->current();
   mem->Ref();
   if (imm != nullptr) imm->Ref();
@@ -1167,11 +1223,14 @@ Status DBImpl::Get(const ReadOptions& options,
     mutex_.Unlock();
     // First look in the memtable, then in the immutable memtable (if any).
     LookupKey lkey(key, snapshot);
+    // 先查询内存中与当前 log 文件对应的 mmtable, 查不到再逐 level 去 sorted table 文件查找
     if (mem->Get(lkey, value, &s)) {
       // Done
+      // 查不到再去正在被压实的 mmtable 去查询
     } else if (imm != nullptr && imm->Get(lkey, value, &s)) {
       // Done
     } else {
+      // 还查不到就去访问 sorted table 文件去查询
       s = current->Get(options, lkey, value, &stats);
       have_stat_update = true;
     }
@@ -1576,6 +1635,7 @@ Status DB::Open(const Options& options, const std::string& dbname,
   VersionEdit edit;
   // Recover handles create_if_missing, error_if_exists
   bool save_manifest = false;
+  // 读取 log 文件恢复数据库
   Status s = impl->Recover(&edit, &save_manifest);
   if (s.ok() && impl->mem_ == nullptr) {
     // Create new log and a corresponding memtable.
@@ -1592,6 +1652,7 @@ Status DB::Open(const Options& options, const std::string& dbname,
       impl->mem_->Ref();
     }
   }
+  // 如果前面有 level 文件变动, 则需要写日志到 manifest 文件
   if (s.ok() && save_manifest) {
     edit.SetPrevLogNumber(0);  // No older logs needed after recovery.
     edit.SetLogNumber(impl->logfile_number_);
