@@ -43,6 +43,8 @@ TableCache::~TableCache() {
   delete cache_;
 }
 
+// 从 cache_ 查找 file_number 对应的 table, 如果查到则将结果保存到 handle; 
+// 否则, 根据 file_number 构造一个新的 table, 并将其插入到 cache_, 并将结果保存到 handle. 
 Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
                              Cache::Handle** handle) {
   Status s;
@@ -89,7 +91,11 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
   }
   return s;
 }
-
+// 返回指定 sorted table 文件对应的迭代器, 具体为:
+// 从 table_cache_ 根据 file_number 查找其对应的 table 对象, 若查到则返回其对应迭代器;
+// 否则加载文件并生成对应的 table 对象放到 table_cache_ 然后返回新构造的 table 的 iterator. 
+// 如果 tableptr 非空, 设置 *tableptr 指向返回的 iterator 底下的 Table 对象. 
+// 返回的 *tableptr 对象由 cache 所拥有, 所以用户不要删除它; 而且只要 iterator 还活着, 该对象即有效. 
 Iterator* TableCache::NewIterator(const ReadOptions& options,
                                   uint64_t file_number,
                                   uint64_t file_size,
@@ -111,7 +117,7 @@ Iterator* TableCache::NewIterator(const ReadOptions& options,
 
   // 取出 table 对象
   Table* table = reinterpret_cast<TableAndFile*>(cache_->Value(handle))->table;
-  // 基于该 table 构造一个双层迭代器
+  // 基于该 table 构造一个两级迭代器
   Iterator* result = table->NewIterator(options);
   // 在该迭代器上注册一个 CleanupFunction 函数, 
   // 该迭代器不再使用的时候该函数负责释放迭代器所属的 table 在 cache_ 中对应的 handle. 

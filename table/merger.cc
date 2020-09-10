@@ -11,7 +11,8 @@
 namespace leveldb {
 
 namespace { // 匿名 namespace 把这个类藏了起来, 只能通过下面的 leveldb namespace 的 NewMergingIterator 获得
-// 一个逻辑迭代器, 它本质是在一组迭代器(children[])上加了一层抽象, 对外部看起来只有一个迭代器而且行为与 Iterator 一致. 
+// 一个逻辑迭代器, 它本质是在一组迭代器(children[])上加了一层抽象, 
+// 对外部看起来只有一个迭代器而且行为与 Iterator 一致. 
 // 该逻辑迭代器拥有 children[] 内容的所有权, 析构时需要释放其内存. 
 // 注意, 我们不保证 children[] 内部每个迭代器之间不重叠, 也不保证有序. 
 // 要求 n 必须大于等于 0, 如果 n 等于 1, 则逻辑迭代器就是普通的 iterator. 
@@ -78,8 +79,10 @@ class MergingIterator : public Iterator {
       for (int i = 0; i < n_; i++) {
         IteratorWrapper* child = &children_[i];
         if (child != current_) { // 让每个非 current_ child 都指向各自迭代范围内第一个大于等于 current_->key 的数据项
+          // 先通过第一级迭代器找到 child, 然后下面这就是在第二级迭代器上进行查询了
           child->Seek(key());
           if (child->Valid() &&
+              // 前面 Seek 找到的是大于等于 key 的位置, 如果找到, 则这里做严格相等判断 
               comparator_->Compare(key(), child->key()) == 0) {
             // 如果某个 child 当前指向恰好等于 current_->key 则将其向前移动一个数据项, 因为我们要找 next.
             // 注意, 由于每个 child 对应的迭代范围保证是单调递增的, 所以不会由重复 key 出现; 但是多个 child 之间不保证由重叠 key. 
@@ -217,6 +220,12 @@ void MergingIterator::FindLargest() {
 }
 }  // namespace
 
+// 提供一个逻辑迭代器, 它本质是在一组迭代器(children[])上加了一层抽象, 
+// 对外部看起来只有一个迭代器而且行为与 Iterator 一致. 
+// 该逻辑迭代器拥有 children[] 内容的所有权, 析构时需要释放其内存. 
+// 注意, 我们不保证 children[] 内部每个迭代器之间不重叠, 也不保证有序, 顺序由
+// 调用方传入的 list 决定. 
+// 要求 n 必须大于等于 0, 如果 n 等于 1, 则逻辑迭代器就是普通的 iterator.
 Iterator* NewMergingIterator(const Comparator* cmp, Iterator** list, int n) {
   assert(n >= 0);
   if (n == 0) {

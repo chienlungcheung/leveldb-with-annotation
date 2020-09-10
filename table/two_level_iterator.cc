@@ -17,16 +17,16 @@ typedef Iterator* (*BlockFunction)(void*, const ReadOptions&, const Slice&);
 
 // 两级迭代器, 这个设计比较巧妙, 但也是由 table 文件结构决定的. 
 //
-// 要想找到某个 <key, value> 对, 肯定先要找到其对应的 data block, 而要找的 data block
+// 要想找到某个 <key, value> 对, 肯定先要找到其对应的 data Block, 而要找的 data Block
 // 就要先在 index block 找到对应的 BlockHandle. 
 // 这个类就是这个寻找过程的实现. 
 //
 // 该类包含两个迭代器封装：
 // - 一个是 index_iter_, 它指向 index block 数据项. 
 //   针对每个 data block 都有一个对应的 entry 包含在 index block 中：
-//  - 其中 key 为大于等于对应 data block 最后(也是最大的, 因为排序过了)
-//    一个 key 同时小于接下来的 data block 第一个 key 的字符串; 
-//  - value 是指向一个对应 data block 的 BlockHandle. 
+//    - 其中 key 为大于等于对应 data block 最后(也是最大的, 因为排序过了)
+//      一个 key 同时小于接下来的 data block 的第一个 key 的(比较拗口)字符串; 
+//    - value 是指向一个对应 data block 的 BlockHandle. 
 // - 另一个是 data_iter_, 它指向 data block 的数据项, 
 //   至于这个 data block 是否与 index_iter_ 所指数据项对应 data block 一致, 
 //   那要看实际情况, 不过即使不一致也无碍. 
@@ -86,7 +86,7 @@ class TwoLevelIterator: public Iterator {
   // 指向 index block 数据项的迭代器 wrapper. 
   // 针对每个 data block 都有一个对应的 entry 包含在 index block 中：
   // - 其中 key 为大于等于对应 data block 最后(也是最大的, 因为排序过了)一个 key
-  // 同时小于接下来的 data block 第一个 key 的字符串; 
+  //    同时小于接下来的 data block 的第一个 key 的字符串; 
   // - value 是指向一个对应 data block 的 BlockHandle. 
   IteratorWrapper index_iter_;
   // 与 index_iter_ 指向对应的 data block(或之后 data block, 因为 data_iter_ 调用 Next 会后移)

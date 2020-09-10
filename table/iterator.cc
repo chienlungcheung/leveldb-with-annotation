@@ -13,8 +13,8 @@ Iterator::Iterator() {
 
 Iterator::~Iterator() {
   if (!cleanup_head_.IsEmpty()) {
+    // 线性的, 如果在该迭代器上注册的清理函数太多了应该会影响性能, 但总要做释放操作, 时间总归省不了.
     cleanup_head_.Run();
-    // 线性的, 太多了应该会影响性能, 但总要做释放操作, 时间总归省不了
     for (CleanupNode* node = cleanup_head_.next; node != nullptr; ) {
       node->Run();
       CleanupNode* next_node = node->next;

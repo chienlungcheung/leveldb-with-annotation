@@ -218,7 +218,7 @@ class Version::LevelFileNumIterator : public Iterator {
   virtual bool Valid() const {
     return index_ < flist_->size();
   }
-  // 将 index_ 移动到 flist 中第一个最大 key 大于等于 target 的索引位置
+  // 将 index_ 移动到 flist 中第一个最大 key 大于等于 target 的文件号
   virtual void Seek(const Slice& target) {
     index_ = FindFile(icmp_, *flist_, target);
   }
@@ -243,7 +243,7 @@ class Version::LevelFileNumIterator : public Iterator {
     assert(Valid());
     return (*flist_)[index_]->largest.Encode();
   }
-  // value 为 index_ 指向文件的 number 和 file_size 组合. 
+  // value 为 index_ 指向文件的 number 和 file_size 组合, 这个组合相当于一个目标数据块. 
   Slice value() const {
     assert(Valid());
     EncodeFixed64(value_buf_, (*flist_)[index_]->number);
@@ -277,21 +277,30 @@ static Iterator* GetFileIterator(void* arg,
   }
 }
 
-// 构造第 level 层文件列表的双层迭代器：
+// 构造指定 level 层文件列表的双层迭代器：
 // - 第一层迭代器(LevelFileNumIterator)指向文件; 
 // - 第二层迭代器指向某个 table 文件具体内容, 其实它也是一个双层迭代器. 
 Iterator* Version::NewConcatenatingIterator(const ReadOptions& options,
                                             int level) const {
   return NewTwoLevelIterator(
+      // 第一个参数是 level 级别的迭代器, 它相当于索引迭代器, 在这个级别找的是包含目标 key 的文件号;
+      // 文件相当于数据块, 再找就是用文件内容的迭代器, 这个是第二级.
       new LevelFileNumIterator(vset_->icmp_, &files_[level]),
+      // GetFileIterator 负责根据定位到的文件号及其大小, 
+      // 从 table_cache_ 找到对应 table, 然后返回后者的迭代器
       &GetFileIterator, vset_->table_cache_, options);
 }
 
+// 将当前 version 维护的 level 架构中每一个 sorted table 文件对应的迭代器
+// 追加到 iters 向量里, 这些迭代器加上 memtable 的迭代器, 就能
+// 遍历整个数据库的内容了. 
+// 前提：当前 Version 对象事先已经通过 VersionSet::SaveTo 方法被保存过了. 
 void Version::AddIterators(const ReadOptions& options,
                            std::vector<Iterator*>* iters) {
   // Merge all level zero files together since they may overlap
   // 将 level-0 文件合并到一起, 因为它们互相之间可能有重叠. 
-  // 合并过程就是为各个 table 文件生成相应的两层迭代器, 然后将各个迭代器放入 *iters
+  // 合并过程就是为各个 table 文件生成相应的两级迭代器, 然后将各个迭代器放入 *iters.
+  // 注意这里是按照从小到达顺序进行追加的, 这样虽然部分重叠, 但是整体有序.
   for (size_t i = 0; i < files_[0].size(); i++) {
     iters->push_back(
         // 针对给定的 file_number(对应的文件长度也必须恰好是 file_size 字节数), 返回一个与其对应 table 的 iterator. 
@@ -304,9 +313,10 @@ void Version::AddIterators(const ReadOptions& options,
   // For levels > 0, we can use a concatenating iterator that sequentially
   // walks through the non-overlapping files in the level, opening them
   // lazily.
-  // level-1 及其以上, 为每一层生成一个级联迭代器
-  // (本质也是一个两层迭代器具体见 Version::NewConcatenatingIterator, level-1 及其之上, 每一层内部, 文件不会发生重叠)
-  // 放入 *iters
+  // level-1 及其以上, 为每一个 level 生成一个级联迭代器
+  // (本质也是一个两级迭代器具体见 Version::NewConcatenatingIterator, 
+  //    level-1 及其之上, 每一层内部, 文件不会发生重叠)放入 *iters
+  // 注意这里是从低 level 到高 level 追加的, 这样可以保证整体有序.
   for (int level = 1; level < config::kNumLevels; level++) {
     if (!files_[level].empty()) {
       iters->push_back(NewConcatenatingIterator(options, level));

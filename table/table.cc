@@ -244,7 +244,7 @@ Iterator* Table::BlockReader(void* arg,
 }
 
 // 根据解析获得的 index block, 先构造一个 index block 数据项的 iterator, 
-// 然后在其基础上构造一个双层迭代器, 用于遍历全部 data blocks 的数据项. 
+// 然后在其基础上构造一个两级迭代器, 用于遍历全部 data blocks 的数据项. 
 Iterator* Table::NewIterator(const ReadOptions& options) const {
   return NewTwoLevelIterator(
       rep_->index_block->NewIterator(rep_->options.comparator),

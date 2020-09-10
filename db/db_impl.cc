@@ -1152,6 +1152,8 @@ static void CleanupIteratorState(void* arg1, void* arg2) {
 
 }  // anonymous namespace
 
+// 该方法负责按序将当前 memtable 以及全部 sorted table 文件对应的迭代器构造出来, 
+// 然后将其组装成一个逻辑迭代器 MergingIterator. 然后就可以用该迭代器遍历整个数据库了.
 Iterator* DBImpl::NewInternalIterator(const ReadOptions& options,
                                       SequenceNumber* latest_snapshot,
                                       uint32_t* seed) {
@@ -1160,18 +1162,25 @@ Iterator* DBImpl::NewInternalIterator(const ReadOptions& options,
 
   // Collect together all needed child iterators
   std::vector<Iterator*> list;
+  // 把当前 memtable 迭代器加入其中
   list.push_back(mem_->NewIterator());
   mem_->Ref();
   if (imm_ != nullptr) {
+    // 把待写盘 memtable 迭代器追加到列表中
     list.push_back(imm_->NewIterator());
     imm_->Ref();
   }
+  // 将当前 version 维护的 level 架构中每个 sorted table 文件对应的迭代器追加到列表中
   versions_->current()->AddIterators(options, &list);
+  // 将全部迭代器上面加一层抽象构成一个逻辑迭代器 MergingIterator
   Iterator* internal_iter =
       NewMergingIterator(&internal_comparator_, &list[0], list.size());
   versions_->current()->Ref();
 
+  // 由于当前 memtable/in-merging-memtable/各个 level 的 sorted tables 的迭代器都被用了,
+  // 所以它们各自引用计数要累加. 等到用完还要递减以释放不需要的内存.
   IterState* cleanup = new IterState(&mutex_, mem_, imm_, versions_->current());
+  // 注册该逻辑迭代器对应的清理函数, 该迭代器析构时就会执行清理函数释释放资源.
   internal_iter->RegisterCleanup(CleanupIteratorState, cleanup, nullptr);
 
   *seed = ++seed_;
@@ -1248,9 +1257,12 @@ Status DBImpl::Get(const ReadOptions& options,
   return s;
 }
 
+// 将内存 memtable 和磁盘 sorted table 文件全部数据结构串起来构造一个大一统迭代器, 可以遍历整个数据库.
+// 具体由 leveldb::Iterator *leveldb::DBImpl::NewInternalIterator 负责完成.
 Iterator* DBImpl::NewIterator(const ReadOptions& options) {
   SequenceNumber latest_snapshot;
   uint32_t seed;
+  // 将内存和磁盘全部数据结构串起来构造一个大一统迭代器, 可以遍历整个数据库
   Iterator* iter = NewInternalIterator(options, &latest_snapshot, &seed);
   return NewDBIterator(
       this, user_comparator(), iter,
