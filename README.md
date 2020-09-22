@@ -1,6 +1,6 @@
 **LevelDB is a fast key-value storage library written at Google that provides an ordered mapping from string keys to string values.**
 
-**LevelDB 是一个快速的键值存储程序库, 提供了字符串形式的 keys 到字符串形式的 values 的有序映射. **
+**LevelDB 是一个快速的键值存储程序库, 提供了字符串形式的 keys 到字符串形式的 values 的有序映射.**
 
 [![Build Status](https://travis-ci.org/google/leveldb.svg?branch=master)](https://travis-ci.org/google/leveldb)
 
@@ -55,10 +55,62 @@ Quick start:
 ```bash
 mkdir -p build && cd build
 cmake -DCMAKE_BUILD_TYPE=Release .. && cmake --build .
+sudo make install
 ```
 
 Please see the CMake documentation and `CMakeLists.txt` for more advanced usage.
 
+```bash
+$ sudo make install/local
+Installing only the local directory...
+-- Install configuration: ""
+-- Installing: /usr/local/lib/libleveldb.a
+-- Installing: /usr/local/include/leveldb/c.h
+-- Installing: /usr/local/include/leveldb/cache.h
+-- Installing: /usr/local/include/leveldb/comparator.h
+-- Installing: /usr/local/include/leveldb/db.h
+-- Installing: /usr/local/include/leveldb/dumpfile.h
+-- Installing: /usr/local/include/leveldb/env.h
+-- Installing: /usr/local/include/leveldb/export.h
+-- Installing: /usr/local/include/leveldb/filter_policy.h
+-- Installing: /usr/local/include/leveldb/iterator.h
+-- Installing: /usr/local/include/leveldb/options.h
+-- Installing: /usr/local/include/leveldb/slice.h
+-- Installing: /usr/local/include/leveldb/status.h
+-- Installing: /usr/local/include/leveldb/table_builder.h
+-- Installing: /usr/local/include/leveldb/table.h
+-- Installing: /usr/local/include/leveldb/write_batch.h
+-- Installing: /usr/local/lib/cmake/leveldb/leveldbTargets.cmake
+-- Installing: /usr/local/lib/cmake/leveldb/leveldbTargets-noconfig.cmake
+-- Installing: /usr/local/lib/cmake/leveldb/leveldbConfig.cmake
+-- Installing: /usr/local/lib/cmake/leveldb/leveldbConfigVersion.cmake
+```
+
+```bash
+$ sudo make install
+Install the project...
+-- Install configuration: ""
+-- Installing: /usr/local/lib/libleveldb.a
+-- Installing: /usr/local/include/leveldb/c.h
+-- Installing: /usr/local/include/leveldb/cache.h
+-- Installing: /usr/local/include/leveldb/comparator.h
+-- Installing: /usr/local/include/leveldb/db.h
+-- Installing: /usr/local/include/leveldb/dumpfile.h
+-- Installing: /usr/local/include/leveldb/env.h
+-- Installing: /usr/local/include/leveldb/export.h
+-- Installing: /usr/local/include/leveldb/filter_policy.h
+-- Installing: /usr/local/include/leveldb/iterator.h
+-- Installing: /usr/local/include/leveldb/options.h
+-- Installing: /usr/local/include/leveldb/slice.h
+-- Installing: /usr/local/include/leveldb/status.h
+-- Installing: /usr/local/include/leveldb/table_builder.h
+-- Installing: /usr/local/include/leveldb/table.h
+-- Installing: /usr/local/include/leveldb/write_batch.h
+-- Installing: /usr/local/lib/cmake/leveldb/leveldbTargets.cmake
+-- Installing: /usr/local/lib/cmake/leveldb/leveldbTargets-noconfig.cmake
+-- Installing: /usr/local/lib/cmake/leveldb/leveldbConfig.cmake
+-- Installing: /usr/local/lib/cmake/leveldb/leveldbConfigVersion.cmake
+```
 # 构建
 
 该工程开箱即支持 CMake. 
@@ -66,7 +118,8 @@ Please see the CMake documentation and `CMakeLists.txt` for more advanced usage.
 快速开始：
 ```bash
 mkdir -p build && cd build
-cmake -DCMAKE_BUILD_TYPE=Release .. && cmake --build
+cmake -DCMAKE_BUILD_TYPE=Release .. && cmake --build .
+sudo make install
 ```
 
 更多高级用法请请参照 CMake 文档和 `CMakeLists.txt`. 

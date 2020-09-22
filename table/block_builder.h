@@ -9,7 +9,6 @@
 
 #include <stdint.h>
 #include "leveldb/slice.h"
-
 namespace leveldb {
 
 struct Options;
@@ -75,7 +74,8 @@ class BlockBuilder {
   const Options*        options_;
   // 存储要构造的 block 内容的缓冲区
   std::string           buffer_;      // Destination buffer
-  // 存储要构造的 block 的全部 restart points(即每个 restart point 在 block 中的偏移量, 第一个 restart point 偏移量为 0)
+  // 存储要构造的 block 的全部 restart points
+  // (即每个 restart point 在 block 中的偏移量, 第一个 restart point 偏移量为 0)
   std::vector<uint32_t> restarts_;    // Restart points
   // 自从 restart 之后新添加的数据项个数
   int                   counter_;     // Number of entries emitted since restart
@@ -90,5 +90,6 @@ class BlockBuilder {
 };
 
 }  // namespace leveldb
+
 
 #endif  // STORAGE_LEVELDB_TABLE_BLOCK_BUILDER_H_

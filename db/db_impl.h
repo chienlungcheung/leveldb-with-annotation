@@ -150,6 +150,7 @@ class DBImpl : public DB {
   port::AtomicPointer has_imm_;       // So bg thread can detect non-null imm_
   // 指向在写 log 文件
   WritableFile* logfile_;
+  // 当前在写 log 文件的文件号
   uint64_t logfile_number_ GUARDED_BY(mutex_);
   log::Writer* log_;
   uint32_t seed_ GUARDED_BY(mutex_);  // For sampling.
@@ -186,6 +187,7 @@ class DBImpl : public DB {
   // Per level compaction stats.  stats_[level] stores the stats for
   // compactions that produced data for the specified "level".
   // 每个 level 对应的的压实过程统计. 
+  // 可以通过 db 提供的 GetProperty 接口供外部查询.
   struct CompactionStats {
     // 记录所属 level 压实累计耗费的时间, 单位毫秒
     int64_t micros;

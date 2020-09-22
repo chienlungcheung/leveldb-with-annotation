@@ -51,7 +51,9 @@ size_t WriteBatch::ApproximateSize() {
 }
 
 /**
- * 迭代 batch, 并依次执行 batch 中每一项记录. 
+ * 迭代 batch, 为每个写操作赋予序列号(这个序列号会用来做快照分界, 比如用户针对同一个 key 不同的更新操作对应一个不同的序列号), 
+ * 该序列号和用户提供的 key 会组装成
+ * skiplist 的 internal_key 然后和 value 一起写入 skiplist. 
  *
  * 注意, 迭代过程出错也不对已执行操作进行回滚. 
  * @param handler 定义了要执行的处理逻辑
@@ -193,6 +195,10 @@ class MemTableInserter : public WriteBatch::Handler {
 
   virtual void Put(const Slice& key, const Slice& value) {
     mem_->Add(sequence_, kTypeValue, key, value);
+    // 写下一个 key/value 之前递增序列号
+    // (memtable 在 key 的 user_key 部分相同时认为序列号越大的越小越放到前面, 
+    //    具体见 leveldb::InternalKeyComparator::Compare, 
+    //    如果 user_key 相等明明序列号越大越靠后, 怎么反而看作更小的呢, 不知为何逆着设计. TODO?)
     sequence_++;
   }
   /**

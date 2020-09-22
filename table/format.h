@@ -72,7 +72,8 @@ class BlockHandle {
 //
 // Footer 封装一个固定长度的信息, 它位于每个 table 文件的末尾. 
 //
-// 在每个 sstable 文件的末尾是一个固定长度的 footer, 它包含了一个指向 metaindex block 的 BlockHandle
+// 在每个 sstable 文件的末尾是一个固定长度的 footer, 
+// 它包含了一个指向 metaindex block 的 BlockHandle
 // 和一个指向 index block 的 BlockHandle 以及一个 magic number. 
 class Footer {
  public:
@@ -104,7 +105,8 @@ class Footer {
   // Footer 长度编码后的长度. 注意, 它就固定这么长. 
   // Footer 包含了一个 metaindex_handle、一个 index_handle、以及一个魔数. 
   enum {
-    kEncodedLength = 2*BlockHandle::kMaxEncodedLength + 8 // Footer 长度, 两个 BlockHandle 最大长度 + 固定的 8 字节魔数
+    // Footer 长度, 两个 BlockHandle 最大长度 + 固定的 8 字节魔数
+    kEncodedLength = 2*BlockHandle::kMaxEncodedLength + 8
   };
 
  private:
@@ -126,6 +128,7 @@ static const uint64_t kTableMagicNumber = 0xdb4775248b80fb57ull;
 // 共 5 字节. 
 static const size_t kBlockTrailerSize = 5;
 
+// 用于保存 block 的数据部分(block 包含三个部分, 数据/压缩类型/crc)
 struct BlockContents {
   Slice data;           // Actual contents of data 真正的数据内容
   bool cachable;        // True iff data can be cached 当且仅当数据可以被缓存的时候为 true

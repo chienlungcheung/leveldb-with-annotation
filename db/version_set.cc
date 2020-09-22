@@ -631,6 +631,11 @@ void Version::Unref() {
   }
 }
 
+// 检查指定的 level 是否与 [*smallest, *largest] 区间相交. 
+// 当且仅当指定 level 的某个文件与 [*smallest, *largest] 指定的 user key 区间重叠返回 true; 
+// 意思是 [*smallest, *largest] 与指定的 level 有重叠. 
+// smallest==nullptr 表示小于 DB 中全部 keys 的 key. 
+// largest==nullptr 表示大于 DB 中全部 keys 的 key. 
 bool Version::OverlapInLevel(int level,
                              const Slice* smallest_user_key,
                              const Slice* largest_user_key) {
@@ -1426,6 +1431,7 @@ Status VersionSet::WriteSnapshot(log::Writer* log) {
   return log->AddRecord(record);
 }
 
+// 查询当亲 Version, 取出对应 level 文件个数
 int VersionSet::NumLevelFiles(int level) const {
   assert(level >= 0);
   assert(level < config::kNumLevels);
@@ -1447,16 +1453,20 @@ const char* VersionSet::LevelSummary(LevelSummaryStorage* scratch) const {
   return scratch->buffer;
 }
 
+// 返回目标 key 在 v 对应的 level 架构中的估计字节偏移量
 uint64_t VersionSet::ApproximateOffsetOf(Version* v, const InternalKey& ikey) {
   uint64_t result = 0;
+  // 遍历保存在 v 中的 level 架构信息
   for (int level = 0; level < config::kNumLevels; level++) {
     const std::vector<FileMetaData*>& files = v->files_[level];
     for (size_t i = 0; i < files.size(); i++) {
+      // 如果整个文件都位于目标 key 之前, 则偏移肯定更靠后
       if (icmp_.Compare(files[i]->largest, ikey) <= 0) {
         // Entire file is before "ikey", so just add the file size
         result += files[i]->file_size;
       } else if (icmp_.Compare(files[i]->smallest, ikey) > 0) {
         // Entire file is after "ikey", so ignore
+        // 如果整个文件都位于目标 key 之后, 则后面文件都不用看了, 偏移肯定在此文件之前
         if (level > 0) {
           // Files other than level 0 are sorted by meta->smallest, so
           // no further files in this level will contain data for
@@ -1470,6 +1480,7 @@ uint64_t VersionSet::ApproximateOffsetOf(Version* v, const InternalKey& ikey) {
         Iterator* iter = table_cache_->NewIterator(
             ReadOptions(), files[i]->number, files[i]->file_size, &tableptr);
         if (tableptr != nullptr) {
+          // 看目标 key 大约在文件内什么位置
           result += tableptr->ApproximateOffsetOf(ikey.Encode());
         }
         delete iter;

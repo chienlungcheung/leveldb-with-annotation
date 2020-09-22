@@ -43,7 +43,7 @@ BlockBuilder::BlockBuilder(const Options* options)
       finished_(false) {
   assert(options->block_restart_interval >= 1);
   // 第一个 restart point 在 block 中的偏移量为 0
-  restarts_.push_back(0);       // First restart point is at offset 0
+  restarts_.push_back(0); // First restart point is at offset 0
 }
 
 void BlockBuilder::Reset() {
@@ -87,7 +87,7 @@ void BlockBuilder::Add(const Slice& key, const Slice& value) {
   assert(buffer_.empty() // No values yet?
          || options_->comparator->Compare(key, last_key_piece) > 0);
   size_t shared = 0;
-  // 如果自上个 restart 之后追加的 key 的个数小于所配置的两个 restart points 之间 keys 的个数, 
+  // 如果自上个 restart 之后追加的 key 的个数小于所配置的两个相邻 restart 之间 keys 的个数, 
   // 计算当前要追加的 key 与上次追加的 key 的公共前缀长度. 
   if (counter_ < options_->block_restart_interval) {
     // See how much sharing to do with previous string
@@ -124,9 +124,11 @@ void BlockBuilder::Add(const Slice& key, const Slice& value) {
 
   // Update state
   last_key_.resize(shared);
-  last_key_.append(key.data() + shared, non_shared); // 将 last_key 更新为当前 key
+  // 将 last_key 更新为当前 key
+  last_key_.append(key.data() + shared, non_shared); 
   assert(Slice(last_key_) == key);
-  counter_++; // 将自上个 restart 之后的记录数加一
+  // 将自上个 restart 之后的记录数加一
+  counter_++; 
 }
 
 }  // namespace leveldb

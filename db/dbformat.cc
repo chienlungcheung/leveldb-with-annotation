@@ -59,9 +59,13 @@ int InternalKeyComparator::Compare(const Slice& akey, const Slice& bkey) const {
   //    decreasing sequence number
   //    decreasing type (though sequence# should be enough to disambiguate)
   int r = user_comparator_->Compare(ExtractUserKey(akey), ExtractUserKey(bkey));
+  // user_key 一般大, 则比较操作序列号
   if (r == 0) {
+    // 把 a 对应的操作序列号取出来
     const uint64_t anum = DecodeFixed64(akey.data() + akey.size() - 8);
+    // 把 b 对应的操作序列号取出来
     const uint64_t bnum = DecodeFixed64(bkey.data() + bkey.size() - 8);
+    // 如果 a 的操作序列号比 b 的大, 则 a 比 b 小
     if (anum > bnum) {
       r = -1;
     } else if (anum < bnum) {
@@ -129,7 +133,8 @@ bool InternalFilterPolicy::KeyMayMatch(const Slice& key, const Slice& f) const {
 
 LookupKey::LookupKey(const Slice& user_key, SequenceNumber s) {
   size_t usize = user_key.size();
-  // 底层存储格式为 varint32 类型的 internal_key 长度(1 到 5 个字节)+ user_key(usize 字节) + tag(8 字节), 
+  // 底层存储格式为 varint32 类型的
+  // internal_key 长度(1 到 5 个字节)+ user_key(usize 字节) + tag(8 字节), 
   // 所以这里预留了 usize + 13 个字节, 足够了. 
   size_t needed = usize + 13;  // A conservative estimate
   char* dst;
@@ -139,11 +144,13 @@ LookupKey::LookupKey(const Slice& user_key, SequenceNumber s) {
     dst = new char[needed];
   }
   start_ = dst;
-  dst = EncodeVarint32(dst, usize + 8); // 注意这里是 internal_key 长度, 而非 user_key 长度
+  // 注意这里是 internal_key 长度, 而非 user_key 长度
+  dst = EncodeVarint32(dst, usize + 8); 
   kstart_ = dst;
   memcpy(dst, user_key.data(), usize);
   dst += usize;
-  EncodeFixed64(dst, PackSequenceAndType(s, kValueTypeForSeek)); // 注意这个 kValueTypeForSeek, 具体见定义处注释. 
+  // 注意这个 kValueTypeForSeek, 具体见定义处注释. 
+  EncodeFixed64(dst, PackSequenceAndType(s, kValueTypeForSeek)); 
   dst += 8;
   end_ = dst;
 }

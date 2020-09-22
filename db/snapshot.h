@@ -52,9 +52,10 @@ class SnapshotList {
 
   // Creates a SnapshotImpl and appends it to the end of the list.
   //
-  // 创建一个指定版本号的快照, 并将其挂到双向循环链表上
+  // 用数据库当前最新的更新操作对应的序列号创建一个快照, 并将其挂到双向循环链表上
   SnapshotImpl* New(SequenceNumber sequence_number) {
-    assert(empty() || newest()->sequence_number_ <= sequence_number); // 最新版本的快照, 版本号必须最大
+    // 最新版本的快照, 版本号必须最大
+    assert(empty() || newest()->sequence_number_ <= sequence_number);
 
     SnapshotImpl* snapshot = new SnapshotImpl(sequence_number);
 

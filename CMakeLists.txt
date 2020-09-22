@@ -19,7 +19,9 @@ option(LEVELDB_BUILD_TESTS "Build LevelDB's unit tests" ON)
 option(LEVELDB_BUILD_BENCHMARKS "Build LevelDB's benchmarks" ON)
 option(LEVELDB_INSTALL "Install LevelDB's header and library" ON)
 
+# 类似 C++ 的 include 指令, 为了引入 TestBigEndian.cmake 内容, 进而使用下面的 test_big_endian
 include(TestBigEndian)
+# 检查当前系统是否支持大端字节序, 结果存储到括号参数里
 test_big_endian(LEVELDB_IS_BIG_ENDIAN)
 
 include(CheckIncludeFile)
@@ -64,11 +66,19 @@ int main() { std::string str; return 0; }
 set(LEVELDB_PUBLIC_INCLUDE_DIR "include/leveldb")
 set(LEVELDB_PORT_CONFIG_DIR "include/port")
 
+# Copies an <input> file to an <output> file and substitutes variable values referenced as @VAR@ or ${VAR} in the input file content. Each variable reference will be replaced with the current value of the variable, or the empty string if the variable is not defined. Furthermore, input lines of the form
+# #cmakedefine VAR ...
+# will be replaced with either
+# #define VAR ...
+# or
+# /* #undef VAR */
 configure_file(
   "${PROJECT_SOURCE_DIR}/port/port_config.h.in"
   "${PROJECT_BINARY_DIR}/${LEVELDB_PORT_CONFIG_DIR}/port_config.h"
 )
 
+# Add the given directories to those the compiler uses to search for include files. Relative paths are interpreted as relative to the current source directory.
+# The include directories are added to the INCLUDE_DIRECTORIES directory property for the current CMakeLists file. They are also added to the INCLUDE_DIRECTORIES target property for each target in the current CMakeLists file. The target property values are the ones used by the generators.
 include_directories(
   "${PROJECT_BINARY_DIR}/include"
   "${PROJECT_SOURCE_DIR}"
@@ -79,7 +89,9 @@ if(BUILD_SHARED_LIBS)
   add_compile_options(-fvisibility=hidden)
 endif(BUILD_SHARED_LIBS)
 
+# Adds a library target called <name> to be built from the source files listed in the command invocation. (The source files can be omitted here if they are added later using target_sources().) The <name> corresponds to the logical target name and must be globally unique within a project. The actual file name of the library built is constructed based on conventions of the native platform (such as lib<name>.a or <name>.lib).
 add_library(leveldb "")
+# Specifies sources to use when compiling a given target. Relative source file paths are interpreted as being relative to the current source directory (i.e. CMAKE_CURRENT_SOURCE_DIR). The named <target> must have been created by a command such as add_executable() or add_library() and must not be an ALIAS target.
 target_sources(leveldb
   PRIVATE
     "${PROJECT_BINARY_DIR}/${LEVELDB_PORT_CONFIG_DIR}/port_config.h"
@@ -187,6 +199,7 @@ target_sources(leveldb
     "${PROJECT_SOURCE_DIR}/helpers/memenv/memenv.h"
 )
 
+# Specifies include directories to use when compiling a given target. The named <target> must have been created by a command such as add_executable() or add_library() and must not be an ALIAS target.
 target_include_directories(leveldb
   PUBLIC
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
@@ -231,12 +244,17 @@ if(HAVE_TCMALLOC)
 endif(HAVE_TCMALLOC)
 
 # Needed by port_stdcxx.h
+# Finds and loads settings from an external project. <PackageName>_FOUND will be set to indicate whether the package was found.
 find_package(Threads REQUIRED)
 target_link_libraries(leveldb Threads::Threads)
 
+# Adds an executable target called <name> to be built from the source files listed in the command invocation. (The source files can be omitted here if they are added later using target_sources().) The <name> corresponds to the logical target name and must be globally unique within a project. The actual file name of the executable built is constructed based on conventions of the native platform (such as <name>.exe or just <name>).
 add_executable(leveldbutil
   "${PROJECT_SOURCE_DIR}/db/leveldbutil.cc"
 )
+# Specify libraries or flags to use when linking a given target and/or its dependents. 
+# The named <target> must have been created by a command such as add_executable() or add_library() and must not be an ALIAS target. 
+# Each <item> may be: A library target name(The named target must be created by add_library() within the project or as an IMPORTED library.), A full path to a library file...
 target_link_libraries(leveldbutil leveldb)
 
 if(LEVELDB_BUILD_TESTS)

@@ -601,12 +601,16 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
   return s;
 }
 
+// 将内存中的 memtable 转换为 sorted table 文件并写入到磁盘中. 
+// 当且仅当该方法执行成功后, 切换到一组新的 log-file/memetable 组合并且写一个新的描述符. 
+// 如果执行失败, 则将错误记录到 bg_error_. 
 void DBImpl::CompactMemTable() {
   mutex_.AssertHeld();
   assert(imm_ != nullptr);
 
   // Save the contents of the memtable as a new Table
-  // 将内存中的 memtable 内容保存为 sorted table 文件
+  // 将内存中的 memtable 内容保存为 sorted table 文件.
+  // 每次落盘就是对当前 level 架构版本的一次编辑.
   VersionEdit edit;
   // 获取当前 dbimpl 对应的最新 version
   Version* base = versions_->current();
@@ -645,19 +649,37 @@ void DBImpl::CompactMemTable() {
   }
 }
 
+/**
+ * 将键范围 [*begin,*end] 对应的底层存储压实, 注意范围是左闭右闭. 
+ *
+ * 压实过程中, 已经被删除或者被覆盖过的数据会被丢弃, 同时会将数据重新安放以减少后续数据访问操作的成本. 
+ * 这个操作是为那些理解底层实现的用户准备的. 
+ *
+ * 如果 begin==nullptr, 则从第一个键开始; 如果 end==nullptr 则到最后一个键为止. 所以, 如果像下面这样做则意味着压紧整个数据库：
+ *
+ * db->CompactRange(nullptr, nullptr);
+ * @param begin 起始键
+ * @param end 截止键
+ */
 void DBImpl::CompactRange(const Slice* begin, const Slice* end) {
   int max_level_with_files = 1;
   {
     MutexLock l(&mutex_);
     Version* base = versions_->current();
     for (int level = 1; level < config::kNumLevels; level++) {
+      // 检查每个 level, 确认其包含的键区间释放与目标键区间有交集.
       if (base->OverlapInLevel(level, begin, end)) {
+        // 与目标键区间有交集的最高 level
         max_level_with_files = level;
       }
     }
   }
+  // 因为当前在写 memtable 可能与目标键区间有交集, 所以
+  // 强制触发一次 memtable 压实(即将当前 memtable 文件转为 sorted table 文件并写入磁盘)
+  // 并生成新 log 文件和对应的 memtable
   TEST_CompactMemTable();  // TODO(sanjay): Skip if memtable does not overlap
   for (int level = 0; level < max_level_with_files; level++) {
+    // 针对与目标键区间有交集的各个 level 触发一次手动压实
     TEST_CompactRange(level, begin, end);
   }
 }
@@ -700,8 +722,11 @@ void DBImpl::TEST_CompactRange(int level, const Slice* begin,
   }
 }
 
+// 强制触发一次 memtable 压实(即将当前 memtable 文件转为 sorted table 文件并写入磁盘)
+// 并生成新 log 文件和对应的 memtable
 Status DBImpl::TEST_CompactMemTable() {
   // nullptr batch means just wait for earlier writes to be done
+  // 等待之前发生的用户写操作结束
   Status s = Write(WriteOptions(), nullptr);
   if (s.ok()) {
     // Wait until the compaction completes
@@ -1130,6 +1155,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
 
 namespace {
 
+// 对迭代器状态暂存, 用于迭代器析构时取出来进行资源释放相关操作.
 struct IterState {
   port::Mutex* const mu;
   Version* const version GUARDED_BY(mu);
@@ -1212,9 +1238,12 @@ Status DBImpl::Get(const ReadOptions& options,
   MutexLock l(&mutex_);
   SequenceNumber snapshot;
   if (options.snapshot != nullptr) {
+    // 如果查询某个快照版本对应的 value(比如针对同样的 key 比如 hello 多次 Put 写入, 
+    //  每次 Put 时对应序列号是不同的)
     snapshot =
         static_cast<const SnapshotImpl*>(options.snapshot)->sequence_number();
   } else {
+    // 否则就用目前数据库最大序列号作为查询时组装 internal_key 用的序列号, 保证查到的是最新的那次更新.
     snapshot = versions_->LastSequence();
   }
 
@@ -1233,6 +1262,7 @@ Status DBImpl::Get(const ReadOptions& options,
   {
     mutex_.Unlock();
     // First look in the memtable, then in the immutable memtable (if any).
+    // 根据 user_key 和快照对应的序列号构造一个 internal_key
     LookupKey lkey(key, snapshot);
     // 先查询内存中与当前 log 文件对应的 mmtable, 查不到再逐 level 去 sorted table 文件查找
     if (mem->Get(lkey, value, &s)) {
@@ -1279,6 +1309,11 @@ void DBImpl::RecordReadSample(Slice key) {
   }
 }
 
+// 用数据库当前最新的更新操作对应的序列号创建一个快照.
+// 快照最核心的就是那个操作序列号, 因为查询时会把 user_key 
+// 和操作序列号一起构成一个 internal_key, 针对 user_key 相等的情况
+// 比如针对 hello 这个 user_key Put 多次, 则每次序列号就不一样,
+// 于是根据特定序列号可以查询到特定的那次 Put 写入的 value 值.
 const Snapshot* DBImpl::GetSnapshot() {
   MutexLock l(&mutex_);
   return snapshots_.New(versions_->LastSequence());
@@ -1331,7 +1366,9 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
     // 队首 writer 负责将队列前面若干 writers 的 batch 合并为一个, 注意, 被合并的 writers 不出队,
     // 写 log 期间队首 writer 不变.
     WriteBatch* updates = BuildBatchGroup(&last_writer);
+    // 设置本批次第一个写操作的序列号
     WriteBatchInternal::SetSequence(updates, last_sequence + 1);
+    // 更新全局写操作的序列号
     last_sequence += WriteBatchInternal::Count(updates);
 
     // Add to log and apply to memtable.  We can release the lock
@@ -1467,6 +1504,8 @@ Status DBImpl::MakeRoomForWrite(bool force) {
   assert(!writers_.empty()); // 断言 writer 队列不为空
   bool allow_delay = !force;
   Status s;
+  // 循环为了避免下面的 background_work_finished_signal_.Wait() 过程中发生 Spurious wakeup,
+  // 具体见 https://en.wikipedia.org/wiki/Spurious_wakeup
   while (true) {
     if (!bg_error_.ok()) {
       // Yield previous error
@@ -1513,6 +1552,7 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       delete log_;
       delete logfile_;
       logfile_ = lfile;
+      // 更新当前在写文件的文件号
       logfile_number_ = new_log_number;
       // 生成一个新的 log writer 负责写文件
       log_ = new log::Writer(lfile);
@@ -1524,13 +1564,30 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       mem_ = new MemTable(internal_comparator_);
       mem_->Ref();
       force = false; // Do not force another compaction if have room
-      // 如果需要触发压实操作, 则进行压实
+      // 如果需要触发压实操作, 则进行压实. 由于上面设置了 imm_, 只要之前 mem_ 不为空则必触发压实.
       MaybeScheduleCompaction();
     }
   }
   return s;
 }
 
+/**
+ * DB 实现可以通过该方法导出自身状态相关的信息. 如果提供的属性可以被 DB 实现理解, 那么第二个参数将会
+ * 存储该属性对应的当前值同时该方法返回 true, 其它情况该方法返回 false. 
+ *
+ * 合法的属性名称包括：
+ *
+ * "leveldb.num-files-at-level<N>" - 返回 level <N> 的文件个数, 其中 <N> 是一个 ASCII 格式的数字. 
+ *
+ * "leveldb.stats" - 返回多行字符串, 描述该 DB 内部操作相关的统计数据. 
+ *
+ * "leveldb.sstables" - 返回多行字符串, 描述构成该 DB 的全部 sstable 相关信息. 
+ *
+ * "leveldb.approximate-memory-usage" - 返回被该 DB 使用的内存字节数近似值
+ * @param property 要查询的状态名称
+ * @param value 保存属性名称对应的属性值
+ * @return
+ */
 bool DBImpl::GetProperty(const Slice& property, std::string* value) {
   value->clear();
 
@@ -1598,6 +1655,8 @@ bool DBImpl::GetProperty(const Slice& property, std::string* value) {
   return false;
 }
 
+// 返回 range 包含的键区间在磁盘上占用的空间大小.
+// range 和 sizes 元素个数均为 n.
 void DBImpl::GetApproximateSizes(
     const Range* range, int n,
     uint64_t* sizes) {
@@ -1605,16 +1664,21 @@ void DBImpl::GetApproximateSizes(
   Version* v;
   {
     MutexLock l(&mutex_);
+    // 获取当前 level 架构信息对应的 Version
     versions_->current()->Ref();
     v = versions_->current();
   }
 
+  // 遍历 range
   for (int i = 0; i < n; i++) {
     // Convert user_key into a corresponding internal key.
     InternalKey k1(range[i].start, kMaxSequenceNumber, kValueTypeForSeek);
     InternalKey k2(range[i].limit, kMaxSequenceNumber, kValueTypeForSeek);
+    // 确定 k1 在当前数据库中的大致字节偏移量
     uint64_t start = versions_->ApproximateOffsetOf(v, k1);
+    // 确定 k2 在当前数据库中的大致字节偏移量
     uint64_t limit = versions_->ApproximateOffsetOf(v, k2);
+    // k2 - k1 即为该键区间占用的空间大致大小
     sizes[i] = (limit >= start ? limit - start : 0);
   }
 

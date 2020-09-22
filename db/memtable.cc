@@ -106,11 +106,15 @@ void MemTable::Add(SequenceNumber s, ValueType type,
   const size_t encoded_len =
       VarintLength(internal_key_size) + internal_key_size +
       VarintLength(val_size) + val_size; // 编码后的数据项总长度
-  char* buf = arena_.Allocate(encoded_len); // 分配用来存储数据项的内存
-  char* p = EncodeVarint32(buf, internal_key_size); // 将编码为 varint32 格式的 internal_key_size 写入内存
-  memcpy(p, key.data(), key_size); // 将 user_key 写入内存
+  // 分配用来存储数据项的内存    
+  char* buf = arena_.Allocate(encoded_len); 
+  // 将编码为 varint32 格式的 internal_key_size 写入内存
+  char* p = EncodeVarint32(buf, internal_key_size); 
+  // 将 user_key 写入内存
+  memcpy(p, key.data(), key_size); 
   p += key_size;
-  // 注意, 序列号虽然是 8 字节但只用了低 7 个字节;  将低 7 个字节左移 8 位, 空出最低字节写入操作类型 type. 
+  // 注意, 序列号为高 7 个字节;  
+  // 将序列号左移 8 位, 空出最低 1 个字节写入操作类型 type. 
   EncodeFixed64(p, (s << 8) | type); // 将序列号和操作类型写入内存
   p += 8;
   p = EncodeVarint32(p, val_size); // 将编码为 varint32 格式的 value_size 写入内存

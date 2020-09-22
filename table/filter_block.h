@@ -27,7 +27,8 @@ class FilterPolicy;
 // The sequence of calls to FilterBlockBuilder must match the regexp:
 //      (StartBlock AddKey*)* Finish
 //
-// FilterBlockBuilder 用于构造 table 的全部 filters. 最后生成一个字符串保存在 Table 的一个特殊的 block 中. 
+// FilterBlockBuilder 用于构造 table 的全部 filters. 
+// 最后生成一个字符串保存在 Table 的一个 meta block 中. 
 //
 // 该类方法调用序列必须满足下面的正则表达式：
 //      (StartBlock AddKey*)* Finish
@@ -44,9 +45,9 @@ class FilterBlockBuilder {
   void GenerateFilter();
 
   const FilterPolicy* policy_;
-  // 平铺开的 keys
+  // 调用 Add 追加的每个 key 都会被同时追加到这个字符串中(用于后续构造过滤器使用)
   std::string keys_;              // Flattened key contents
-  // 每个 key 在 keys 中的偏移量
+  // 每个被 Add 的 key 在 keys 字符串中的索引
   std::vector<size_t> start_;     // Starting index in keys_ of each key
   // 目前为止计算出来的 filter 数据
   std::string result_;            // Filter data computed so far

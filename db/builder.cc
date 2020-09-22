@@ -14,6 +14,15 @@
 
 namespace leveldb {
 
+// 该方法用于将 memtable 序列化为 sorted table 文件并写入磁盘,
+// 同时确保该文件对应的 table 对象会被放到 table_cache_.
+//
+// 从迭代器 *iter 指向的 memtable 构造一个 Table 文件, 
+// 新生成的 Table 文件将基于 meta->number 进行命名.
+// 如果构造成功, *meta 的其它字段将会被合理填充.
+//
+// 如果 *iter 对应的 Memtable 为空, 则 meta->file_size 将会被置为 0,
+// 而且不会生成任何 Table 文件.
 Status BuildTable(const std::string& dbname,
                   Env* env,
                   const Options& options,

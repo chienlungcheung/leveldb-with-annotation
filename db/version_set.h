@@ -388,7 +388,7 @@ class VersionSet {
   // Return the approximate offset in the database of the data for
   // "key" as of version "v".
   //
-  // 返回估计偏移量 key 在数据库中的todo
+  // 返回目标 key 在 v 对应的 level 架构中的估计字节偏移量
   uint64_t ApproximateOffsetOf(Version* v, const InternalKey& key);
 
   // Return a human-readable short (single-line) summary of the number
@@ -435,6 +435,8 @@ class VersionSet {
   const InternalKeyComparator icmp_;
   uint64_t next_file_number_;
   uint64_t manifest_file_number_;
+  // 记录最近一次更新操作对应的序列号(逐一递增, WriteBatch 包含一批更新操作, 每个更新操作都会有一个序列号).
+  // 具体修改建 DbImpl::Write 方法
   uint64_t last_sequence_;
   uint64_t log_number_;
   uint64_t prev_log_number_;  // 0 or backing store for memtable being compacted

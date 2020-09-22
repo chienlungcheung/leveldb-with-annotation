@@ -291,7 +291,8 @@ inline void SkipList<Key,Comparator>::Iterator::Prev() {
 // 定位 key >= target 的第一个 node
 template<typename Key, class Comparator>
 inline void SkipList<Key,Comparator>::Iterator::Seek(const Key& target) {
-  node_ = list_->FindGreaterOrEqual(target, nullptr); // 我们只是要查找, 后续不做插入, 所以第二个用于存储 target 前驱节点的数组为 nullptr
+  // 我们只是要查找, 后续不做插入, 所以第二个用于存储 target 前驱节点的数组为 nullptr
+  node_ = list_->FindGreaterOrEqual(target, nullptr); 
 }
 
 template<typename Key, class Comparator>
@@ -323,22 +324,24 @@ int SkipList<Key,Comparator>::RandomHeight() {
   return height;
 }
 
-// 判断 key 是否大于 Node n 的 key
+// 如果 key 在 node 后面(即比它的 key 大)则返回 true; 否则返回 false.
 // 如果 n 为 nullptr 意味着它的 key 无限大, 所以返回 false. 
 template<typename Key, class Comparator>
 bool SkipList<Key,Comparator>::KeyIsAfterNode(const Key& key, Node* n) const {
   // null n is considered infinite
+  // 这里的 compare_ 请见 leveldb::InternalKeyComparator::Compare 实现.
   return (n != nullptr) && (compare_(n->key, key) < 0);
 }
 
-// 返回第一个 key 大于等于参数中 key 的 node 的指针; 返回 nullptr 意味着全部 nodes 的 key 都小于参数 key.
+// 返回第一个 key 大于等于目标 key 的 node 的指针; 返回 nullptr 意味着全部 nodes 的 key 都小于参数 key.
 //
 // 如果参数 pre 非空, 则将所找到的 node 在每一个 level 的前驱节点的指针赋值到 pre[level], 方便先查找再插入操作. 
 template<typename Key, class Comparator>
 typename SkipList<Key,Comparator>::Node* SkipList<Key,Comparator>::FindGreaterOrEqual(const Key& key, Node** prev)
     const {
   Node* x = head_;
-  int level = GetMaxHeight() - 1; // 获取 SkipList 当前的最高的 level, 下面找的时候是从最上 level 逐层向下寻找. 
+  // 获取 SkipList 当前的最高的 level, 下面找的时候是从最上 level 逐层向下寻找. 
+  int level = GetMaxHeight() - 1; 
   while (true) {
     Node* next = x->Next(level);
     if (KeyIsAfterNode(key, next)) {
@@ -420,7 +423,8 @@ void SkipList<Key,Comparator>::Insert(const Key& key) {
   // TODO(opt): We can use a barrier-free variant of FindGreaterOrEqual()
   // here since Insert() is externally synchronized.
   Node* prev[kMaxHeight];
-  Node* x = FindGreaterOrEqual(key, prev); // 找到第一个 >= key 的节点, 如果为 nullptr 表示都比 key 小
+  // 找到第一个大约等于目标 key 的节点, 如果为 nullptr 表示都比 key 小
+  Node* x = FindGreaterOrEqual(key, prev); 
 
   // Our data structure does not allow duplicate insertion
   // 我们的数据结构不允许重复插入相同 key 的数据项, 所以下面断言需要成立

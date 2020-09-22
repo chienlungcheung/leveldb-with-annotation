@@ -202,7 +202,7 @@ class LEVELDB_EXPORT DB {
   //  "leveldb.approximate-memory-usage" - returns the approximate number of
   //     bytes of memory in use by the DB.
   /**
-   * DB 实现可以通过该方法导出自身状态相关的属性. 如果提供的属性可以被 DB 实现理解, 那么第二个参数将会
+   * DB 可以通过该方法导出自身状态信息. 如果提供的属性可以被 DB 实现理解, 那么第二个参数将会
    * 存储该属性对应的当前值同时该方法返回 true, 其它情况该方法返回 false. 
    *
    * 合法的属性名称包括：
@@ -253,9 +253,9 @@ class LEVELDB_EXPORT DB {
   // Therefore the following call will compact the entire database:
   //    db->CompactRange(nullptr, nullptr);
   /**
-   * 将 key 范围 [*begin,*end] 对应的底层存储压紧, 注意范围是左闭右闭. 
+   * 将键范围 [*begin,*end] 对应的底层存储压实, 注意范围是左闭右闭. 
    *
-   * 尤其是, 压实过程会将已经删除或者复写过的数据会被丢弃, 同时会将数据重新安放以减少后续数据访问操作的成本. 
+   * 压实过程中, 已经被删除或者被覆盖过的数据会被丢弃, 同时会将数据重新安放以减少后续数据访问操作的成本. 
    * 这个操作是为那些理解底层实现的用户准备的. 
    *
    * 如果 begin==nullptr, 则从第一个键开始; 如果 end==nullptr 则到最后一个键为止. 所以, 如果像下面这样做则意味着压紧整个数据库：

@@ -27,16 +27,30 @@ struct Table::Rep {
 
   Options options;
   Status status;
-  RandomAccessFile* file; // table 对应的文件
-  uint64_t cache_id; // 如果该 table 具备对应的 block_cache, 该值与 block 在 table 中的起始偏移量一起构成 key, value 为 block
-  FilterBlockReader* filter; // 解析出来的 filter block
-  const char* filter_data; // filter block 原始数据
+  // table 对应的文件
+  RandomAccessFile* file; 
+  // 如果该 table 具备对应的 block_cache, 
+  // 该值与 block 在 table 中的起始偏移量一起构成 key, value 为 block
+  uint64_t cache_id; 
+  // 解析出来的 filter block
+  FilterBlockReader* filter; 
+  // filter block 原始数据
+  const char* filter_data; 
 
   // 从 table Footer 取出来的, 指向 table 的 metaindex block
   BlockHandle metaindex_handle;  // Handle to metaindex_block: saved from footer
-  Block* index_block; // index block 原始数据, 保存的是每个 data block 的 BlockHandle
+  // index block 原始数据, 保存的是每个 data block 的 BlockHandle
+  Block* index_block;
 };
 
+// 打开一个保存在 file 的 [0..file_size) 的 sorted table, 并读取必要的 metadata 数据项
+// 以从该 table 检索数据. 
+//
+// 如果成功, 返回 OK 并将 *table 设置为新打开的 table. 当不再使用该 table 时候, 客户端负责删除之. 
+// 如果在初始化 table 出错, 将 *table 设置为 nullptr 并返回 non-OK. 
+// 而且, 在 table 打开期间, 客户端要确保数据源持续有效. 
+//
+// 当 table 在使用过程中, *file 必须保持有效. 
 Status Table::Open(const Options& options,
                    RandomAccessFile* file,
                    uint64_t size,

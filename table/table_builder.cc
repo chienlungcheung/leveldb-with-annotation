@@ -109,7 +109,8 @@ void TableBuilder::Add(const Slice& key, const Slice& value) {
     assert(r->options.comparator->Compare(key, Slice(r->last_key)) > 0); // 确保待添加的 key 大于之前已添加过的全部 keys
   }
 
-  if (r->pending_index_entry) { // 需要构造一个新的 data block
+  // 需要构造一个新的 data block
+  if (r->pending_index_entry) { 
     assert(r->data_block.empty());
     // 函数调用结束, last_key 长度可能更短但是值可能更大但不会 >= key
     r->options.comparator->FindShortestSeparator(&r->last_key, key);
@@ -120,14 +121,16 @@ void TableBuilder::Add(const Slice& key, const Slice& value) {
     r->index_block.Add(r->last_key, Slice(handle_encoding));
     r->pending_index_entry = false;
   }
-
+  
+  // 如果该 table 存在 filter block, 则将该 key 加入
   if (r->filter_block != nullptr) {
-    r->filter_block->AddKey(key); // 如果该 table 存在 filter block, 则将该 key 加入
+    r->filter_block->AddKey(key);
   }
 
   r->last_key.assign(key.data(), key.size());
   r->num_entries++;
-  r->data_block.Add(key, value); // 将 key,value 添加到 data block 中
+  // 将 key,value 添加到 data block 中
+  r->data_block.Add(key, value); 
 
   const size_t estimated_block_size = r->data_block.CurrentSizeEstimate();
   // 如果当前 data block 估计大小大于设定阈值, 则将该 data block 写入文件
@@ -143,13 +146,16 @@ void TableBuilder::Flush() {
   if (!ok()) return;
   if (r->data_block.empty()) return;
   assert(!r->pending_index_entry);
-  WriteBlock(&r->data_block, &r->pending_handle); // 在该方法中 data_block 会调用 Reset()
+  // 将 data block 压缩并落盘, 在该方法中 data_block 会调用 Reset()
+  WriteBlock(&r->data_block, &r->pending_handle); 
   if (ok()) {
     r->pending_index_entry = true;
     r->status = r->file->Flush();
   }
   if (r->filter_block != nullptr) {
-    r->filter_block->StartBlock(r->offset); // 为新的 data block 计算 filter 做准备
+    // 为新的 data block 计算 filter 做准备, 
+    // r->offset 为下个 block 起始地址, 该值在上面 WriteBlock 调用 WriteRawBlock 时会进行更新.
+    r->filter_block->StartBlock(r->offset); 
   }
 }
 
@@ -189,7 +195,8 @@ void TableBuilder::WriteBlock(BlockBuilder* block, BlockHandle* handle) {
   }
   WriteRawBlock(block_contents, type, handle); // 将 block 内容写入文件
   r->compressed_output.clear();
-  block->Reset(); // block 清空
+  // block 清空, 准备复用处理下个 block
+  block->Reset(); 
 }
 
 // 将 block 及其 trailer 写入 table 对应的文件, 并将 block 对应的 BlockHandle 内容保存到 handle 中. 
@@ -207,8 +214,10 @@ void TableBuilder::WriteRawBlock(const Slice& block_contents,
     uint32_t crc = crc32c::Value(block_contents.data(), block_contents.size());
     crc = crc32c::Extend(crc, trailer, 1);  // Extend crc to cover block type
     EncodeFixed32(trailer+1, crc32c::Mask(crc));
-    r->status = r->file->Append(Slice(trailer, kBlockTrailerSize)); // 把该 block 的 trailer 写入文件
+    // 把该 block 的 trailer (包含压缩类型和 crc) 写入文件
+    r->status = r->file->Append(Slice(trailer, kBlockTrailerSize)); 
     if (r->status.ok()) {
+      // 下个 block 在 table 中的起始偏移量
       r->offset += block_contents.size() + kBlockTrailerSize;
     }
   }
@@ -220,6 +229,7 @@ Status TableBuilder::status() const {
 
 Status TableBuilder::Finish() {
   Rep* r = rep_;
+  // 写 data blocks
   Flush();
   assert(!r->closed);
   // 调用了 Finish
@@ -227,7 +237,7 @@ Status TableBuilder::Finish() {
 
   BlockHandle filter_block_handle, metaindex_block_handle, index_block_handle;
 
-  // Write filter block
+  // Write filter blocks
   // 如果存在 filter block, 则将其写入文件; 
   // 写完后, filter_block_handle 保存着该 block 对应的 BlockHandle 信息, 包括起始偏移量和大小
   if (ok() && r->filter_block != nullptr) {

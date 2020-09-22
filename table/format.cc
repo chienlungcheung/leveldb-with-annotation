@@ -72,6 +72,12 @@ Status Footer::DecodeFrom(Slice* input) {
   return result;
 }
 
+// 从 file 去读 handle 指向的 block:
+// - 读取整个块, 包含数据+压缩类型+crc
+// - 校验 crc: 重新计算 crc 并与保存 crc 比较
+// - 解析压缩类型, 根据压缩类型对数据进行解压缩
+// - 将 block 数据部分保存到 BlockContents 中
+// 失败返回 non-OK; 成功则将数据填充到 *result 并返回 OK. 
 Status ReadBlock(RandomAccessFile* file,
                  const ReadOptions& options,
                  const BlockHandle& handle,
@@ -86,7 +92,8 @@ Status ReadBlock(RandomAccessFile* file,
   // Read the block contents as well as the type/crc footer.
   // See table_builder.cc for the code that built this structure.
   size_t n = static_cast<size_t>(handle.size()); // 要读取的 block 的大小
-  char* buf = new char[n + kBlockTrailerSize]; // 每个 block 后面跟着它的 type (1 字节)和 crc (4 字节)
+  // 每个 block 后面跟着它的压缩类型 type (1 字节)和 crc (4 字节)
+  char* buf = new char[n + kBlockTrailerSize]; 
   Slice contents;
   // handle.offset() 指向对应 block 在文件里的起始偏移量
   Status s = file->Read(handle.offset(), n + kBlockTrailerSize, &contents, buf);
@@ -105,9 +112,11 @@ Status ReadBlock(RandomAccessFile* file,
   // Check the crc of the type and the block contents
   const char* data = contents.data();    // Pointer to where Read put the data
   if (options.verify_checksums) {
-    // 将 block 的 CRC 解除掩码并与重新计算的 CRC 进行比对
+    // 读取 block 末尾的 crc(始于第 n+1 字节)
     const uint32_t crc = crc32c::Unmask(DecodeFixed32(data + n + 1));
+    // 计算 block 前 n+1 字节的 crc
     const uint32_t actual = crc32c::Value(data, n + 1);
+    // 比较保存的 crc 和实际计算的 crc 是否一致
     if (actual != crc) {
       delete[] buf;
       s = Status::Corruption("block checksum mismatch");
