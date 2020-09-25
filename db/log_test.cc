@@ -90,7 +90,9 @@ class LogTest {
 
   class ReportCollector : public Reader::Reporter {
    public:
+    // 因文件损坏丢掉的字节数
     size_t dropped_bytes_;
+    // 文件损坏原因
     std::string message_;
 
     ReportCollector() : dropped_bytes_(0) { }
