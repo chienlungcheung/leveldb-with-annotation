@@ -67,7 +67,7 @@ Status Footer::DecodeFrom(Slice* input) {
   if (result.ok()) { // 此时 input 包含的数据只有可能的 padding 0 了
     // We skip over any leftover data (just padding for now) in "input"
     const char* end = magic_ptr + 8;
-    *input = Slice(end, input->data() + input->size() - end); // todo Slice 第二个参数为负数, 生成这样的对象的目的为何呢？
+    *input = Slice(end, input->data() + input->size() - end); // todo Slice 第二个参数为负数, 生成这样的对象的目的为何呢? 
   }
   return result;
 }

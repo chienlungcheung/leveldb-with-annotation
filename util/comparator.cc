@@ -16,13 +16,15 @@ namespace leveldb {
 Comparator::~Comparator() { }
 
 namespace {
-// 一个基于字典序进行逐字节比较的内置 comparator 实现
+//  
 class BytewiseComparatorImpl : public Comparator {
  public:
   BytewiseComparatorImpl() { }
 
   virtual const char* Name() const {
-    return "leveldb.BytewiseComparator";// 注意 "leveldb." 开头的名字被 leveldb 保留了, 如果客户端实现自己的 comparator 不要用这种命名方式
+    // 注意 "leveldb." 开头的名字被 leveldb 保留了, 
+    // 如果客户端实现自己的 comparator 不要用这种命名方式
+    return "leveldb.BytewiseComparator";
   }
 
   virtual int Compare(const Slice& a, const Slice& b) const {

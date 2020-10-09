@@ -363,7 +363,7 @@ Status DBImpl::Recover(VersionEdit* edit, bool *save_manifest) {
     // 解析文件类型
     if (ParseFileName(filenames[i], &number, &type)) {
       expected.erase(number);
-      // 若文件类型为 log, 且文件名(是一个数字)不小于当前在写入文件名或者等于当前正在转换为 mmtable 的文件名,
+      // 若文件类型为 log, 且文件名(是一个数字)不小于当前在写入文件名或者等于当前正在转换为 memtable 的文件名,
       // 则将文该文件加入到恢复列表中.
       if (type == kLogFile && ((number >= min_log) || (number == prev_log)))
         logs.push_back(number);
@@ -403,7 +403,7 @@ Status DBImpl::Recover(VersionEdit* edit, bool *save_manifest) {
   return Status::OK();
 }
 
-// 读取 log 文件并将其转为 mmtable. 如果该 log 文件继续使用则将其对应 memtable 赋值到 mem_ 继续使用;
+// 读取 log 文件并将其转为 memtable. 如果该 log 文件继续使用则将其对应 memtable 赋值到 mem_ 继续使用;
 // 否则将 log 文件对应 memtable 转换为 sorted table 文件写入磁盘, 同时标记 save_manifest 为 true,
 // 表示 level 架构变动需要记录文件变更到 manifest 文件.
 Status DBImpl::RecoverLogFile(uint64_t log_number, bool last_log,
@@ -455,7 +455,7 @@ Status DBImpl::RecoverLogFile(uint64_t log_number, bool last_log,
   WriteBatch batch;
   int compactions = 0;
   MemTable* mem = nullptr;
-  // 读取 log 文件并将其转为 mmtable
+  // 读取 log 文件并将其转为 memtable
   while (reader.ReadRecord(&record, &scratch) &&
          status.ok()) {
     if (record.size() < 12) {
@@ -469,7 +469,7 @@ Status DBImpl::RecoverLogFile(uint64_t log_number, bool last_log,
       mem = new MemTable(internal_comparator_);
       mem->Ref();
     }
-    // 将数据填充到 mmtable
+    // 将数据填充到 memtable
     status = WriteBatchInternal::InsertInto(&batch, mem);
     MaybeIgnoreError(&status);
     if (!status.ok()) {
@@ -482,7 +482,7 @@ Status DBImpl::RecoverLogFile(uint64_t log_number, bool last_log,
       *max_sequence = last_seq;
     }
 
-    // 如果 mmtable 太大了, 将其转为 sorted table 文件写入磁盘, 
+    // 如果 memtable 太大了, 将其转为 sorted table 文件写入磁盘, 
     // 同时将其对应的 table 对象放到 table_cache_ 缓存
     if (mem->ApproximateMemoryUsage() > options_.write_buffer_size) {
       compactions++;
@@ -514,7 +514,7 @@ Status DBImpl::RecoverLogFile(uint64_t log_number, bool last_log,
       // 继续使用之前创建的最后一个 log 文件记录日志
       log_ = new log::Writer(logfile_, lfile_size);
       logfile_number_ = log_number;
-      // 为当前 log 文件重用(之前未写磁盘)或创建一个新的 mmtable;
+      // 为当前 log 文件重用(之前未写磁盘)或创建一个新的 memtable;
       // 重用 mem 后其必定被置为空.
       if (mem != nullptr) {
         mem_ = mem;
@@ -527,7 +527,7 @@ Status DBImpl::RecoverLogFile(uint64_t log_number, bool last_log,
     }
   }
 
-  // log 文件没有被重用, 将其对应 mmtable 转为 sorted table 文件写入磁盘
+  // log 文件没有被重用, 将其对应 memtable 转为 sorted table 文件写入磁盘
   if (mem != nullptr) {
     // mem did not get reused; compact it.
     if (status.ok()) {
@@ -560,7 +560,7 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
   {
     // 构造 Table 文件的时候与 mutex_ 要守护的成员变量无关, 可以解除锁定
     mutex_.Unlock();
-    // 将 mmtable 序列化为一个 sorted table 文件并写入磁盘, 文件大小会被保存到 meta 中.
+    // 将 memtable 序列化为一个 sorted table 文件并写入磁盘, 文件大小会被保存到 meta 中.
     s = BuildTable(dbname_, env_, options_, table_cache_, iter, &meta);
     // 构造完毕, 重新获取锁, 诸如 pending_outputs_ 需要 mutex_ 来守护
     mutex_.Lock();
@@ -749,36 +749,48 @@ void DBImpl::RecordBackgroundError(const Status& s) {
   }
 }
 
+// 根据具体情况决定是否进行 memtable 到 sstable 文件的转换
 void DBImpl::MaybeScheduleCompaction() {
+  // 多个线程压实一个 memtable 显然是有问题的
   mutex_.AssertHeld();
+  // 如果已经触发过压实任务直接返回
   if (background_compaction_scheduled_) {
     // Already scheduled
   } else if (shutting_down_.Acquire_Load()) {
+    // 如果数据库已经关闭了, 也没必要压实了, 因为关闭时做过了
     // DB is being deleted; no more background compactions
   } else if (!bg_error_.ok()) {
+    // 如果后台压实出了错误, 这意味着待压实数据不会有变化
     // Already got an error; no more changes
   } else if (imm_ == nullptr &&
              manual_compaction_ == nullptr &&
              !versions_->NeedsCompaction()) {
+    // 如果无 memtable 需压实并且没有手工触发的压实任务并且没有任何 level 需要压实,
+    // 则啥也不做
     // No work to be done
   } else {
+    // 否则, 需要触发压实任务
     background_compaction_scheduled_ = true;
     env_->Schedule(&DBImpl::BGWork, this);
   }
 }
 
+// 该方法仅在 DBImpl::MaybeScheduleCompaction 调用
 void DBImpl::BGWork(void* db) {
   reinterpret_cast<DBImpl*>(db)->BackgroundCall();
 }
 
+// 该方法仅在 DBImpl::BGWork 调用
 void DBImpl::BackgroundCall() {
   MutexLock l(&mutex_);
+  // 该标识已经在 DBImpl::MaybeScheduleCompaction 进行设置
   assert(background_compaction_scheduled_);
   if (shutting_down_.Acquire_Load()) {
     // No more background work when shutting down.
   } else if (!bg_error_.ok()) {
     // No more background work after a background error.
   } else {
+    // 执行具体的压实任务
     BackgroundCompaction();
   }
 
@@ -790,6 +802,7 @@ void DBImpl::BackgroundCall() {
   background_work_finished_signal_.SignalAll();
 }
 
+// 该方法仅在 DBImpl::BackgroundCall 调用
 void DBImpl::BackgroundCompaction() {
   mutex_.AssertHeld();
 
@@ -1225,7 +1238,7 @@ int64_t DBImpl::TEST_MaxNextLevelOverlappingBytes() {
   return versions_->MaxNextLevelOverlappingBytes();
 }
 
-// 先查询当前在用的 mmtable, 如果没有则查询正在转换为 sorted table 的 mmtable 中寻找, 
+// 先查询当前在用的 memtable, 如果没有则查询正在转换为 sorted table 的 memtable 中寻找, 
 // 如果没有则我们在磁盘上采用从底向上 level-by-level 的寻找目标 key. 
 // 由于 level 越低数据越新, 因此, 当我们在一个较低的 level 找到数据的时候, 不用在更高的 levels 找了.
 // 由于 level-0 文件之间可能存在重叠, 而且针对同一个 key, 后产生的文件数据更新所以先将包含 key 的文件找出来
@@ -1264,10 +1277,10 @@ Status DBImpl::Get(const ReadOptions& options,
     // First look in the memtable, then in the immutable memtable (if any).
     // 根据 user_key 和快照对应的序列号构造一个 internal_key
     LookupKey lkey(key, snapshot);
-    // 先查询内存中与当前 log 文件对应的 mmtable, 查不到再逐 level 去 sorted table 文件查找
+    // 先查询内存中与当前 log 文件对应的 memtable, 查不到再逐 level 去 sorted table 文件查找
     if (mem->Get(lkey, value, &s)) {
       // Done
-      // 查不到再去待压实的 mmtable 去查询
+      // 查不到再去待压实的 memtable 去查询
     } else if (imm != nullptr && imm->Get(lkey, value, &s)) {
       // Done
     } else {
@@ -1349,7 +1362,9 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
   writers_.push_back(&w); 
   // 当前 writer 工作没完成并且不是队首元素, 则当前有其它 writer 在写, 挂起当前 writer 等待条件成熟
   while (!w.done && &w != writers_.front()) { 
-    // 临时释放锁
+    // 当前 writer 所在线程进入等待状态, 
+    // 这会导致上面 MutexLock 上的锁被释放掉,
+    // 于是其它写线程得以有机会调用当前 Write() 方法.
     w.cv.Wait();
   }
   // 当前 writer 如果被排在前面 writer 给合并写入了, 那么它的 done 就被标记为完成了.
@@ -1358,17 +1373,24 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
   }
 
   // May temporarily unlock and wait.
-  // 确认是否为本次写操作分配新的 log 文件, 如果需要则分配
+  // 确认是否为本次写操作分配新的 log 文件, 如果需要则分配.
+  // 下面方法可能会临时释放锁并进入等待状态, 这会导致更多 writers
+  // 入队, 方便后面写的时候做写入合并写入一大批数据.
   Status status = MakeRoomForWrite(my_batch == nullptr);
   uint64_t last_sequence = versions_->LastSequence();
   Writer* last_writer = &w;
   if (status.ok() && my_batch != nullptr) {  // nullptr batch is for compactions
-    // 队首 writer 负责将队列前面若干 writers 的 batch 合并为一个, 注意, 被合并的 writers 不出队,
-    // 写 log 期间队首 writer 不变.
+    // 队首 writer 负责将队列前面若干 writers 的 batch 合并为一个. 
+    // 注意&重要, 被合并的 writers 不出队, 写 log 期间队首 writer 不变,
+    // 这个能确保后续写 log 写 memtable 期间, 其它进入 Write() 方法
+    // 的线程对应的 Writer 因为不可能是队首元素最深只能进入到 Write() 方法入口
+    // 的 while() 循环并陷入等待状态, 而不会出现多个 writer 并发写的情况,
+    // 从而确保了 log/memtable 相关操作的线程安全.
+    // 执行这些操作需要持有锁, 确保不会同时发生多个针对相同数据的合并操作.
     WriteBatch* updates = BuildBatchGroup(&last_writer);
-    // 设置本批次第一个写操作的序列号
+    // 设置本批次第一个写操作的序列号, 然后根据操作个数更新全局写操作的序列号, 
+    // 执行这些操作需要持有锁, 确保 sequence 被互斥访问.
     WriteBatchInternal::SetSequence(updates, last_sequence + 1);
-    // 更新全局写操作的序列号
     last_sequence += WriteBatchInternal::Count(updates);
 
     // Add to log and apply to memtable.  We can release the lock
@@ -1376,8 +1398,7 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
     // and protects against concurrent loggers and concurrent writes
     // into mem_.
     {
-      // 这里临时释放可以让队列中被合并的其它 writer 得以进入方法开头的 while 循环内进行 wait;
-      // 最佳情况是下面写 log 时候, 被代表的 writers 全部进入了 wait 状态.
+      // 这里临时释放可以让其它 writer 趁机在 Write 方法入口处进入写入队列.
       mutex_.Unlock();
       // 将合并后的 batch 作为 record 追加到 log 文件中
       status = log_->AddRecord(WriteBatchInternal::Contents(updates));
@@ -1389,7 +1410,7 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
         }
       }
       if (status.ok()) {
-        // 如果追加 log 文件成功,则将被追加的数据插入到内存中的 mmtable 中
+        // 如果追加 log 文件成功,则将被追加的数据插入到内存中的 memtable 中
         status = WriteBatchInternal::InsertInto(updates, mem_);
       }
       mutex_.Lock();
@@ -1560,7 +1581,7 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       imm_ = mem_;
       // 将 imm_ 存储到 has_imm_ 中
       has_imm_.Release_Store(imm_);
-      // 创建一个与新 log 文件对应的 mmtable
+      // 创建一个与新 log 文件对应的 memtable
       mem_ = new MemTable(internal_comparator_);
       mem_->Ref();
       force = false; // Do not force another compaction if have room

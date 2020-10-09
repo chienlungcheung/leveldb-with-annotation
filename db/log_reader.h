@@ -102,7 +102,7 @@ class Reader {
   // skipped in this mode
   //
   // initial_offset_ > 0 时, resyncing_ 为 true. 
-  // 为啥呢？
+  // 为啥呢? 
   // 因为如果 initial_offset 指向的那个 record 类型如果是 MIDDLE, 则说明该 record 不完整, 所以需要重新同步, 
   // 实际操作就是跳过 initial_offset 起始的那些 MIDDLE 和 LAST 类型 record 直至一个 FIRST 类型的 record. 
   bool resyncing_;

@@ -159,7 +159,11 @@ class AtomicPointer {
   explicit AtomicPointer(void* p) : rep_(p) {}
   inline void* NoBarrier_Load() const { return rep_; }
   inline void NoBarrier_Store(void* v) { rep_ = v; }
-  // 确保 load 之后的操作不能重排序到 load 之前
+  // 具备 acquire 语义的 load 操作, 确保了两点:
+  // - 执行 load 的当前线程随后的读写操作不能重排序到 load 之前;
+  // - 其它线程针对其它变量(不管是否被当前 load 操作的变量所依赖)
+  //   的写操作在 release 该变量(当前 load 操作的变量)之后, 
+  //   对当前 load 操作也是可见的.
   inline void* Acquire_Load() const {
     // 执行 load, 然后插入屏障隔开
     void* result = rep_;
@@ -170,7 +174,9 @@ class AtomicPointer {
     MemoryBarrier();
     return result;
   }
-  // 确保 store 之前的读写操作不能被重排序到 store 之后
+  // 具备 release 语义的 store 操作, 确保了两点:
+  // - 执行 store 操作的当前线程, 之前的读写操作不能被重排序到 store 之后;
+  // - 在此 store 之前的针对其它变量的全部写操作对 acquire 该原子变量的其它线程也都是可见的.
   inline void Release_Store(void* v) {
     // 确保对 v 的 load (传参有赋值行为, 需要 load)发生在 rep_ 的 store 之前, 
     // 这样可以确保把最新的 v 存储到 rep_ 所在的内存位置, 

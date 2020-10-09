@@ -43,8 +43,10 @@ class Arena {
   char* AllocateNewBlock(size_t block_bytes);
 
   // Allocation state
-  char* alloc_ptr_; // 指向该 arena 当前空闲字节起始地址
-  size_t alloc_bytes_remaining_; // 该 arena 当前空闲字节数
+  // 指向该 arena 当前空闲字节起始地址
+  char* alloc_ptr_; 
+  // 该 arena 当前空闲字节数
+  size_t alloc_bytes_remaining_; 
 
   // Array of new[] allocated memory blocks
   // 存放通过 new[] 分配的全部内存块
@@ -60,14 +62,11 @@ class Arena {
 };
 
 inline char* Arena::Allocate(size_t bytes) {
-  // The semantics of what to return are a bit messy if we allow
-  // 0-byte allocations, so we disallow them here (we don't need
-  // them for our internal use).
-  //
-  // 如果我们允许分配 0 字节内存, 那该方法返回什么的语义就有点乱, 所以我们不允许返回 0 字节(我们
-  // 内部也没这个需求). 
+  // 如果我们允许分配 0 字节内存, 那该方法返回什么的语义就有点乱, 
+  // 所以我们不允许返回 0 字节(我们内部也没这个需求). 
   assert(bytes > 0);
-  if (bytes <= alloc_bytes_remaining_) { // arena 剩余内存够则直接分配
+  // arena 剩余内存够则直接分配
+  if (bytes <= alloc_bytes_remaining_) { 
     char* result = alloc_ptr_;
     alloc_ptr_ += bytes;
     alloc_bytes_remaining_ -= bytes;

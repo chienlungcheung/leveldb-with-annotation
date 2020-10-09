@@ -143,7 +143,7 @@ class DBImpl : public DB {
   port::Mutex mutex_;
   port::AtomicPointer shutting_down_;
   port::CondVar background_work_finished_signal_ GUARDED_BY(mutex_);
-  // 当前在用的 mmtable
+  // 当前在用的 memtable
   MemTable* mem_;
   // 正在被压实的 memtable, 其对应 log 文件已经满了.
   MemTable* imm_ GUARDED_BY(mutex_);  // Memtable being compacted
@@ -167,6 +167,8 @@ class DBImpl : public DB {
   std::set<uint64_t> pending_outputs_ GUARDED_BY(mutex_);
 
   // Has a background compaction been scheduled or is running?
+  // 一个标识, 标识当前后台是否已经调度了压实任务(memtable 转 sstable, 
+  // 或者客户端手动触发或者某个 level 达到压实条件)(无论是否执行中)
   bool background_compaction_scheduled_ GUARDED_BY(mutex_);
 
   // Information for a manual compaction
@@ -182,6 +184,7 @@ class DBImpl : public DB {
   VersionSet* const versions_;
 
   // Have we encountered a background error in paranoid mode?
+  // 偏执模式下执行后台压实任务时是否遇到了错误
   Status bg_error_ GUARDED_BY(mutex_);
 
   // Per level compaction stats.  stats_[level] stores the stats for

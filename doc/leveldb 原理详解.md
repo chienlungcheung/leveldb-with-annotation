@@ -36,7 +36,7 @@ static Status Open(const Options& options,
   - 将 log 文件块转换为一个新的 level-0 sstable
   - 将接下来的要写的数据写入一个新的 log 文件
 
-- 2. 遍历数据库目录下全部文件. 筛选出 sorted table 文件, 验证 VersionSet 包含的 level 架构图有效性; 同时将全部 log 文件筛选换出来后续反序列化成 memtable. 恢复 log 文件时会按照从旧到新逐个 log 文件恢复, 这样新的修改会覆盖旧的, 如果对应 mmtable 太大了, 将其转为 sorted table 文件写入磁盘, 同时将其对应的 table 对象放到 table_cache_ 缓存. 若发生 memtable 落盘表示 level 架构新增文件则将 save_manifest 标记为 true, 表示需要写变更日志到 manifest 文件. 恢复 log 文件主要由方法 `leveldb::DBImpl::RecoverLogFile` 负责完成.
+- 2. 遍历数据库目录下全部文件. 筛选出 sorted table 文件, 验证 VersionSet 包含的 level 架构图有效性; 同时将全部 log 文件筛选换出来后续反序列化成 memtable. 恢复 log 文件时会按照从旧到新逐个 log 文件恢复, 这样新的修改会覆盖旧的, 如果对应 memtable 太大了, 将其转为 sorted table 文件写入磁盘, 同时将其对应的 table 对象放到 table_cache_ 缓存. 若发生 memtable 落盘表示 level 架构新增文件则将 save_manifest 标记为 true, 表示需要写变更日志到 manifest 文件. 恢复 log 文件主要由方法 `leveldb::DBImpl::RecoverLogFile` 负责完成.
 
 ### Put
 
@@ -89,7 +89,7 @@ virtual Status Write(const WriteOptions& options, WriteBatch* updates) = 0;
 
 针对调用 db 进行的写操作, 都会生成一个对应的 `struct leveldb::DBImpl::Writer`, 其封装了写入数据和写入进度. 新构造的 writer 会被放入一个队列. 循环检查, 若当前 writer 工作没完成并且不是队首元素, 则当前有其它 writer 在写, 挂起当前 writer 等待条件成熟. 当前 writer 如果被排在前面的 writer 给合并写入了, 那么它的 done 就被标记为完成了. 否则会被其它在写入的 writer 调用其 signal 将其唤醒执行写入工作.
 
-当执行写入工作时(被前一个执行写入并完成工作的 writer 唤醒了), 首先确认是否为本次该 writer 写操作分配新的 log 文件, 如果需要则分配. 因为该 writer 成为队首 writer 了, 则它负责将队列前面若干 writers 的 batch 合并为一个(该工作由`leveldb::DBImpl::BuildBatchGroup` 负责完成), 注意, 被合并的 writers 不出队(待合并写入完成再出队, 具体见后面描述), 所以写 log 期间队首 writer 不变. 具体写入工作由 `leveldb::log::Writer::AddRecord` 负责, 就是将数据序列化为 record 写入 log 文件. 如果追加 log 文件成功,则将被追加的数据插入到内存中的 mmtable 中. 待写入完毕, 该 writer 将参与前述 batch group 写入 log 文件的 writer 都取出来并设置为写入完成, 即将其出队, 将其 done 置为 true, 同时向其发送信号将其唤醒, 被唤醒后它会检查其 done 标识并返回. 最后唤醒队首 writer 执行下一个合并写入.
+当执行写入工作时(被前一个执行写入并完成工作的 writer 唤醒了), 首先确认是否为本次该 writer 写操作分配新的 log 文件, 如果需要则分配. 因为该 writer 成为队首 writer 了, 则它负责将队列前面若干 writers 的 batch 合并为一个(该工作由`leveldb::DBImpl::BuildBatchGroup` 负责完成), 注意, 被合并的 writers 不出队(待合并写入完成再出队, 具体见后面描述), 所以写 log 期间队首 writer 不变. 具体写入工作由 `leveldb::log::Writer::AddRecord` 负责, 就是将数据序列化为 record 写入 log 文件. 如果追加 log 文件成功,则将被追加的数据插入到内存中的 memtable 中. 待写入完毕, 该 writer 将参与前述 batch group 写入 log 文件的 writer 都取出来并设置为写入完成, 即将其出队, 将其 done 置为 true, 同时向其发送信号将其唤醒, 被唤醒后它会检查其 done 标识并返回. 最后唤醒队首 writer 执行下一个合并写入.
 
 ### Get
 
@@ -108,8 +108,8 @@ virtual Status Get(const ReadOptions& options,
                     const Slice& key, std::string* value) = 0;
 ```
 
-- 1 先查询当前在用的 mmtable(具体工作由 `leveldb::MemTable::Get` 负责, 本质就是 SkipList 查询, 速度很快)
-- 2 如果没有则查询正在转换为 sorted table 的 mmtable 中寻找
+- 1 先查询当前在用的 memtable(具体工作由 `leveldb::MemTable::Get` 负责, 本质就是 SkipList 查询, 速度很快)
+- 2 如果没有则查询正在转换为 sorted table 的 memtable 中寻找
 - 3 如果没有则我们在磁盘上采用从底向上 level-by-level 的寻找目标 key. 
 
 针对上述第 3 步, 具体由 db VersionSet 的当前 Version 负责, 因为该结构保存了 db 当前最新的 level 架构信息, 即每个 level 及其对应的文件列表和每个文件的键范围. 对应方法为 `leveldb::Version::Get`, 具体为:
@@ -297,15 +297,15 @@ leveldb::Status leveldb::log::Writer::AddRecord(const leveldb::Slice &slice)
 bool leveldb::log::Reader::ReadRecord(leveldb::Slice *record, std::__cxx11::string *scratch)
 ```
 
-该方法负责从 log 文件读取内容并反序列化为 Record. 该方法会在 db 的 `Open` 方法中调用, 负责将磁盘上的 log 文件转换为内存中 mmtable. 其它数据库恢复场景也会用到该方法.
+该方法负责从 log 文件读取内容并反序列化为 Record. 该方法会在 db 的 `Open` 方法中调用, 负责将磁盘上的 log 文件转换为内存中 memtable. 其它数据库恢复场景也会用到该方法.
 
-#### 与 log 文件配套的 mmtable
+#### 与 log 文件配套的 memtable
 ##### 结构
 它的本质就是一个 SkipList.
 ##### 用途
-我们已经知道, 每个 log 文件在内存有一个对应的 mmtable, 它和正在压实的 mmtable 以及磁盘上的各个 level 包含的文件构成了数据全集. 所以当调用 DB 的 `Get` 方法查询某个 key 的时候, 具体步骤是这样的(具体实现位于 `leveldb::Status leveldb::Version::Get(const leveldb::ReadOptions &options, const leveldb::LookupKey &k, std::__cxx11::string *value, leveldb::Version::GetStats *stats)`, DB 的 `Get` 方法会调用前述实现.):
-- 1 先查询当前在用的 mmtable, 查到返回, 未查到下一步
-- 2 查询正在转换为 sorted table 的 mmtable 中寻找, 查到返回, 未查到下一步 
+我们已经知道, 每个 log 文件在内存有一个对应的 memtable, 它和正在压实的 memtable 以及磁盘上的各个 level 包含的文件构成了数据全集. 所以当调用 DB 的 `Get` 方法查询某个 key 的时候, 具体步骤是这样的(具体实现位于 `leveldb::Status leveldb::Version::Get(const leveldb::ReadOptions &options, const leveldb::LookupKey &k, std::__cxx11::string *value, leveldb::Version::GetStats *stats)`, DB 的 `Get` 方法会调用前述实现.):
+- 1 先查询当前在用的 memtable, 查到返回, 未查到下一步
+- 2 查询正在转换为 sorted table 的 memtable 中寻找, 查到返回, 未查到下一步 
 - 3 在磁盘上采用从底向上 level-by-level 的寻找目标 key. 
   - 由于 level 越低数据越新, 因此, 当我们在一个较低的 level 找到数据的时候, 不用在更高的 levels 找了.
   - 由于 level-0 文件之间可能存在重叠, 而且针对同一个 key, 后产生的文件数据更新所以先将包含 key 的文件找出来按照文件号从大到小(对应文件从新到老)排序查找 key; 针对 level-1 及其以上 level, 由于每个 level 内文件之间不存在重叠, 于是在每个 level 中直接采用二分查找定位 key.

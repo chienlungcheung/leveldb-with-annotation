@@ -46,7 +46,7 @@ static const int kL0_StopWritesTrigger = 12;
 // the largest level since that can generate a lot of wasted disk
 // space if the same key space is being repeatedly overwritten.
 //
-// 指示 mmtable 可以直接放到的最高 level.
+// 指示 memtable 可以直接放到的最高 level.
 // 我们尝试将数据 push 到 level-2, 这样可以避免代价相对较高的从 level-0 到 level-1 的 push, 同时避免
 // 代价较高的 manifest 文件操作. 
 // 我们不会一直往这个 level 上 push, 因为如果同样的键空间被重复的覆写会造成大量的磁盘空间浪费. 

@@ -99,7 +99,9 @@ class MemTable {
   struct KeyComparator {
     const InternalKeyComparator comparator;
     explicit KeyComparator(const InternalKeyComparator& c) : comparator(c) { }
-    // 注意, 这个操作符重载方法很关键, 该方法的会先从 char* 类型地址获取 internal_key, 然后对 internal_key 进行比较. 
+    // 注意, 这个操作符重载方法很关键, 该方法的会先从 char* 类型地址获取 internal_key, 
+    // 然后对 internal_key 进行比较. 
+    // 该方法未在 memtable 直接调用, 而是被底层的 SkipList 使用了.
     int operator()(const char* a, const char* b) const;
   };
   friend class MemTableIterator;

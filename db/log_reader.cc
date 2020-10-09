@@ -80,7 +80,7 @@ bool Reader::ReadRecord(Slice* record, std::string* scratch) {
   bool in_fragmented_record = false; 
 
   // 记录我们正在读取的逻辑 record 的起始偏移量. 初值为 0 无实际意义仅为编译器不发警告. 
-  // 为啥叫逻辑 record 呢？
+  // 为啥叫逻辑 record 呢? 
   // 因为 block 大小限制, 所以 record 可能被分成多个分片(fragment). 
   // 我们管 fragment 叫物理 record, 一个或多个物理 record 构成一个逻辑 record. 
   uint64_t prospective_record_offset = 0;

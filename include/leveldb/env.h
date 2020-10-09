@@ -236,7 +236,7 @@ class LEVELDB_EXPORT Env {
   // same directory.
   //
   // *path 会被设置为一个临时目录, 从来做测试. 
-  // 是否事先创建该目录都无所谓. 这个目录在同一个进程多次运行时可能不同, 但是后续的调用都返回同一个目录(？). 
+  // 是否事先创建该目录都无所谓. 这个目录在同一个进程多次运行时可能不同, 但是后续的调用都返回同一个目录(? ). 
   virtual Status GetTestDirectory(std::string* path) = 0;
 
   // Create and return a log file for storing informational messages.

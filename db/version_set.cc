@@ -187,7 +187,7 @@ bool SomeFileOverlapsRange(
 
   // 到这说明 files[index].largest >= smallest_user_key, 
   // 需要确认 files[index].smallest <= largest_user_key 是否成立, 如果成立则相交. 
-  // 为啥不是检查 largest_user_key <= files[index].largest？
+  // 为啥不是检查 largest_user_key <= files[index].largest? 
   // 是为了避免 files[index].largest > smallest_user_key 且 files[index].largest > largest_user_key, 
   // 这样看不出来是否相交. 
 
@@ -608,7 +608,7 @@ bool Version::RecordReadSample(Slice internal_key) {
   // finding such files?
   //
   // 至少有两次匹配(即至少存在两个文件的范围与 user_key 重叠)我们才去合并文件即压实. 
-  // 但是如果存在单个文件包含很多复写和删除怎么办？我们应该为发现此类文件建立另外的机制吗？
+  // 但是如果存在单个文件包含很多复写和删除怎么办? 我们应该为发现此类文件建立另外的机制吗? 
   if (state.matches >= 2) {
     // 1MB cost is about 1 seek (see comment in Builder::Apply).
     // 一次查询大约消耗 1MB(具体见 Builder::Apply 方法注释)
@@ -834,7 +834,7 @@ class VersionSet::Builder {
       const FileSet* added = levels_[level].added_files;
       std::vector<FileMetaData*> to_unref;
       to_unref.reserve(added->size());
-      // todo 不知道为啥要拷贝一份, 为啥不把下面循环里的事情一起干了？
+      // todo 不知道为啥要拷贝一份, 为啥不把下面循环里的事情一起干了? 
       // 可能是避免每次删除都要调整树的平衡吧(红黑数插入、删除、检索时间复杂度都为 O(logN). 
       for (FileSet::const_iterator it = added->begin();
           it != added->end(); ++it) {
@@ -914,7 +914,7 @@ class VersionSet::Builder {
       // 如果允许查询次数小于 100, 则按 100 次处理. 
       if (f->allowed_seeks < 100) f->allowed_seeks = 100;
 
-      // todo 一个文件会同时出现在删除列表和新增列表？
+      // todo 一个文件会同时出现在删除列表和新增列表? 
       levels_[level].deleted_files.erase(f->number);
       levels_[level].added_files->insert(f);
     }

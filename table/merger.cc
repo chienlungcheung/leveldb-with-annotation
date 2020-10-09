@@ -71,7 +71,7 @@ class MergingIterator : public Iterator {
     // the smallest child and key() == current_->key().  Otherwise,
     // we explicitly position the non-current_ children.
     //
-    // 该方法执行完毕要确保全部 child 所指都在方法执行之前的 current_->key 之后(todo 不一定, 也可能等于？). 
+    // 该方法执行完毕要确保全部 child 所指都在方法执行之前的 current_->key 之后(todo 不一定, 也可能等于? ). 
     // 如果我们正在正向移动(即刚调用过 Seek() 或者 SeekToFirst()或者 Next()), 那么全部非 current 的 child 都满足上面说的这个状态了, 
     // 因为从 current_ 为最小的那个 child 而且显然的 key() == current_->key(), 所以直接指向判断后面的 next 即可(todo 这个地方有问题, 因为此时其它非 child 指向的 key 可能等于 current->key). 
     // 其它情况下, 我们需要显式地移动非 current child 到合适的位置. 
@@ -109,7 +109,7 @@ class MergingIterator : public Iterator {
     // the largest child and key() == current_->key().  Otherwise,
     // we explicitly position the non-current_ children.
     //
-    // 确保全部 child 都位于当前 current->key 之后(todo 不一定, 也可能等于？). 
+    // 确保全部 child 都位于当前 current->key 之后(todo 不一定, 也可能等于? ). 
     // 如果我们正在反向移动(执行了 SeekToLast()), 全部非 current child 都满足上面的条件, 因为 current 当前指向
     // 最大的 child 而且显然地 key() == current_->key. 
     // 其它情况下, 我们需要显式地将全部非 child 移动到合适满足上述条件的位置. 

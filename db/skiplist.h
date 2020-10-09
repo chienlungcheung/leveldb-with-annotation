@@ -50,6 +50,7 @@ class Arena;
 template<typename Key, class Comparator>
 class SkipList {
  private:
+  // 前向声明
   struct Node;
 
  public:
@@ -136,7 +137,8 @@ class SkipList {
   };
 
  private:
-  enum { kMaxHeight = 12 }; // 默认 SkipList 最多 12 个 level
+  // 默认 SkipList 最多 12 个 level
+  enum { kMaxHeight = 12 }; 
 
   // Immutable after construction
   Comparator const compare_; // 初始化以后不可更改
@@ -208,47 +210,58 @@ struct SkipList<Key,Comparator>::Node {
 
   Key const key;
 
-  // Accessors/mutators for links.  Wrapped in methods so we can
-  // add the appropriate barriers as necessary.
-  //
-  // 返回该 node 在 level n 的后继节点的指针
+  // 自带 acquire 语义, 返回该 node 在第 n 级(计数从 0 开始) 索引层的后继节点的指针
   Node* Next(int n) {
     assert(n >= 0);
-    // Use an 'acquire load' so that we observe a fully initialized
-    // version of the returned Node.
+    // 采用 acquire 语义可以确保如下两点:
+    // - 当前线程后续针对 next_[n] 节点的读写不会被重排序到此 load 之前;
+    // - 其它线程在此 load 之前针对 next_[n] 节点的全部写操作此时均可见,
+    //   并且, 其它线程对其它变量的写操作在其 release 当前变量后对当前线程也是
+    //   可见的.
     return reinterpret_cast<Node*>(next_[n].Acquire_Load());
   }
-  // 设置该 node 在 level n 的后继节点
+
+  // 自带 release 语义, 设置该 node 在第 n 级(计数从 0 开始) 索引层的后继节点
   void SetNext(int n, Node* x) {
     assert(n >= 0);
-    // Use a 'release store' so that anybody who reads through this
-    // pointer observes a fully initialized version of the inserted node.
+    // 采用 release 语义可以确保如下两点:
+    // - 在此 store 之前, 当前线程针对 next_[n] 节点的读写不会被重排序到此 store 之后;
+    // - 在此 store 之后, 其它线程针对 next_[n] 节点的读写看到的都是此 store 写入的值,
+    //   并且, 执行 store 之前对其它变量的写操作, 执行 store 之后对其它线程也是可见的.
     next_[n].Release_Store(x);
   }
 
-  // No-barrier variants that can be safely used in a few locations.
+  // 同 Next, 但无同步防护.
   Node* NoBarrier_Next(int n) {
     assert(n >= 0);
     return reinterpret_cast<Node*>(next_[n].NoBarrier_Load());
   }
+
+  // 同 SetNext, 但无同步防护.
   void NoBarrier_SetNext(int n, Node* x) {
     assert(n >= 0);
     next_[n].NoBarrier_Store(x);
   }
 
  private:
-  // Array of length equal to the node height.  next_[0] is lowest level link.
+  // Array of length equal to the node height. 
+  // next_[0] is lowest level link.
   //
-  // 长度等于节点高度的数组, next_[0] 存放该 node 在最低 level 上的指向下一个节点的原子指针. 
+  // 长度等于节点高度的数组, next_[0] 存放该 node 在
+  // 最低 level 上的指向下一个节点的原子指针. 
   port::AtomicPointer next_[1];
 };
 
 template<typename Key, class Comparator>
 typename SkipList<Key,Comparator>::Node*
 SkipList<Key,Comparator>::NewNode(const Key& key, int height) {
+  // 要分配的空间存储的是用户数据和当前节点在 SkipList 各个索引层的后向指针, 
+  // 其中后者是现算出来的.
   char* mem = arena_->AllocateAligned(
-      sizeof(Node) + sizeof(port::AtomicPointer) * (height - 1)); // 为啥减 1？因为 Node.next_ 已默认分配了一项
-  return new (mem) Node(key); // 定位 new
+      // 为啥减 1? 因为 Node.next_ 已默认分配了一项
+      sizeof(Node) + sizeof(port::AtomicPointer) * (height - 1));
+  // 此乃定位 new, 即在 mem 指向内存位置创建 Node 对象
+  return new (mem) Node(key); 
 }
 
 template<typename Key, class Comparator>
@@ -308,13 +321,15 @@ inline void SkipList<Key,Comparator>::Iterator::SeekToLast() {
   }
 }
 
-// 返回一个高度值, 返回值介于 [1, kMaxHeight] 之间
+// 返回一个高度值, 返回值落于 [1, kMaxHeight], 
+// SkipList 实现默认索引层最多 12 个.
 template<typename Key, class Comparator>
 int SkipList<Key,Comparator>::RandomHeight() {
-  // Increase height with probability 1 in kBranching
   // 以 1/kBranching 概率循环递增 height. 
-  // 只要 kBranching 大于 1, 就倾向于返回较小的高度. 假设 kBranching == 4, 则返回 1 概率为 1/4, 返回 2 概率为 1/16, .... 
+  // 每次拔擢都是在前一次拔擢成功的前提下再进行, 如果前一次失败则停止拔擢. 
+  // 假设 kBranching == 4, 则返回 1 概率为 1/4, 返回 2 概率为 1/16, .... 
   static const unsigned int kBranching = 4;
+  // 每个节点最少有一层索引(就是原始链表)
   int height = 1;
   while (height < kMaxHeight && ((rnd_.Next() % kBranching) == 0)) {
     height++;
@@ -333,36 +348,50 @@ bool SkipList<Key,Comparator>::KeyIsAfterNode(const Key& key, Node* n) const {
   return (n != nullptr) && (compare_(n->key, key) < 0);
 }
 
-// 返回第一个 key 大于等于目标 key 的 node 的指针; 返回 nullptr 意味着全部 nodes 的 key 都小于参数 key.
+// 返回第一个大于等于目标 key 的 node 的指针; 
+// 返回 nullptr 意味着全部 nodes 的 key 都小于参数 key.
 //
-// 如果参数 pre 非空, 则将所找到的 node 在每一个 level 的前驱节点的指针赋值到 pre[level], 方便先查找再插入操作. 
+// 如果想获取目标节点的前驱, 则令参数 pre 非空, 
+// 所找到的 node 所在索引层的前驱节点将被保存到 pre[] 对应层.
 template<typename Key, class Comparator>
-typename SkipList<Key,Comparator>::Node* SkipList<Key,Comparator>::FindGreaterOrEqual(const Key& key, Node** prev)
+typename SkipList<Key,Comparator>::Node* 
+SkipList<Key,Comparator>::FindGreaterOrEqual(const Key& key, Node** prev)
     const {
+  // head_ 为 SkipList 原始数据链表的起始节点,
+  // 该节点不存储用户数据, 仅用作哨兵.
   Node* x = head_;
-  // 获取 SkipList 当前的最高的 level, 下面找的时候是从最上 level 逐层向下寻找. 
+  // 每次查找都是从最高索引层开始查找, 只要确认可能存在
+  // 才会降到下一级更细致索引层继续查找.
+  // 索引层计数从 0 开始, 所以这里减一才是最高层.
   int level = GetMaxHeight() - 1; 
   while (true) {
+    // 下面用的 Next 方法是带同步设施的, 其实由于 SkipList 对外开放的操作
+    // 需要调用者自己提供同步, 所以这里可以直接用 NoBarrier_Next.
     Node* next = x->Next(level);
     if (KeyIsAfterNode(key, next)) {
-      // Keep searching in this list
-      x = next; // key 大于 next, 继续在该 level 继续向后找
+      // key 大于 next, 在该索引层继续向后找
+      x = next; 
     } else {
+      // key 可能存在.
+      //
       // 如果 key 比 SkipList 中每个 node 的 key 都小, 
-      // 那么最后返回的的 node 为 head_->Next(0), 同时 pre 里面存的都是 dummy head; 
-      // 调用者使用返回的 node 的 key 与自己持有 key(internal_key)的进一步进行对比, 确定是否找到目标. 
+      // 那么最后返回的 node 为 head_->Next(0), 
+      // 同时 pre 里面存的都是 dummy head; 
+      // 调用者需要使用返回的 node 与自己持有 key进一步进行对比,
+      // 以确定是否找到目标节点. 
       if (prev != nullptr) prev[level] = x;
       if (level == 0) {
-        return next; // 就是它！如果 key 比 SkipList 里每个 node 的都大, 则 next 最终为 nullptr. 
+        // 就是它！如果 key 比 SkipList 里每个 node 的都大, 则 next 最终为 nullptr.
+        return next;  
       } else {
-        // Switch to next list 确定目标范围, 但是粒度太粗, 下沉一层继续找
+        // 确定目标范围, 但是粒度太粗, 下沉一层继续找
         level--;
       }
     }
   }
 }
 
-// 返回最后一个 key 小于参数 key 的 node 的指针
+// 返回最后一个小于 key 的 node 的指针
 template<typename Key, class Comparator>
 typename SkipList<Key,Comparator>::Node*
 SkipList<Key,Comparator>::FindLessThan(const Key& key) const {
@@ -375,7 +404,8 @@ SkipList<Key,Comparator>::FindLessThan(const Key& key) const {
       if (level == 0) {
         return x; // x 就是小于 key 的最后那个 node 了. 
       } else {
-        // Switch to next list 确定存在目标节点, 但是粒度太粗, 下沉一层继续找
+        // Switch to next list 
+        // 确定存在目标节点, 但是粒度太粗, 下沉一层继续找
         level--;
       }
     } else {
@@ -420,37 +450,39 @@ SkipList<Key,Comparator>::SkipList(Comparator cmp, Arena* arena)
 // 该方法非线程安全, 需要外部同步设施. 
 template<typename Key, class Comparator>
 void SkipList<Key,Comparator>::Insert(const Key& key) {
-  // TODO(opt): We can use a barrier-free variant of FindGreaterOrEqual()
-  // here since Insert() is externally synchronized.
+  // pre 将用于存储 key 对应的各个索引层的前驱节点
   Node* prev[kMaxHeight];
-  // 找到第一个大约等于目标 key 的节点, 如果为 nullptr 表示都比 key 小
+  // 找到第一个大约等于目标 key 的节点, 一会会把 key
+  // 插到这个节点前面.
+  // 如果为 nullptr 表示当前 SkipList 节点都比 key 小.
   Node* x = FindGreaterOrEqual(key, prev); 
 
-  // Our data structure does not allow duplicate insertion
-  // 我们的数据结构不允许重复插入相同 key 的数据项, 所以下面断言需要成立
+  // 虽然 x 是我们找到的第一个大于等于目标 key 的节点, 
+  // 但是 leveldb 不允许重复插入 key 相等的数据项.
   assert(x == nullptr || !Equal(key, x->key));
 
+  // 确定待插入节点的最大索引层数
   int height = RandomHeight();
+  // 更新 SkipList 实例维护的最大索引层数
   if (height > GetMaxHeight()) {
+    // 如果最大索引层数有变, 则当前节点将是索引层数最多的节点,
+    // 需要将前面求得的待插入节点的前驱节点高度补齐.
     for (int i = GetMaxHeight(); i < height; i++) {
-      prev[i] = head_; // 新生成了几个 level, key 对应的前驱节点肯定都是 dummy head
+      // 新生成了几个 level, key 对应的前驱节点肯定都是 dummy head
+      prev[i] = head_; 
     }
     //fprintf(stderr, "Change height from %d to %d\n", max_height_, height);
 
-    // It is ok to mutate max_height_ without any synchronization
-    // with concurrent readers.  A concurrent reader that observes
-    // the new value of max_height_ will see either the old value of
-    // new level pointers from head_ (nullptr), or a new value set in
-    // the loop below.  In the former case the reader will
-    // immediately drop to the next level since nullptr sorts after all
-    // keys.  In the latter case the reader will use the new node.
-    //
-    // 这里在修改 max_height_ 时候没有插入 barrier. 其它并发读线程如果观察到新的 max_height_ 值, 
-    // 那它们将会要么看到 dummy head 新的层(注意 SkipList 初始化时会把 dummy head 的高度直接初始化为最大, 所以不存在越界问题)
-    // 的值都为 nullptr, 要么看到的是下面循环将要赋值的新节点 x. 
+    // 这里在修改 max_height_ 无需同步, 哪怕同时有多个并发读线程. 
+    // 其它并发读线程如果观察到新的 max_height_ 值, 
+    // 那它们将会要么看到 dummy head 新的索引层(注意 SkipList 
+    // 初始化时会把 dummy head 的索引高度直接初始化为最大, 默认是 12, 
+    // 所以不存在越界问题)的值都为 nullptr, 要么看到的是
+    // 下面循环将要赋值的新节点 x. 
     max_height_.NoBarrier_Store(reinterpret_cast<void*>(height));
   }
 
+  // 为待插入数据创建一个新节点
   x = NewNode(key, height);
   // 将 x 插入到每一层前后节点之间, 注意是每一层, 
   // 插入的时候都是先采用 no barrier 方式为 x 后继赋值, 此时 x 还不会被其它线程看到; 
@@ -458,8 +490,9 @@ void SkipList<Key,Comparator>::Insert(const Key& key) {
   // 了 NewNode 时可能发生的通过 NoBarrier_Store 方式修改的 arena_.memory_usage_), 
   // 最后修改 x 前驱的后继为自己. 
   for (int i = 0; i < height; i++) {
-    // NoBarrier_SetNext() suffices since we will add a barrier when
-    // we publish a pointer to "x" in prev[i].
+    // 注意该循环就下面两步, 而且只有第二步采用了同步设施, 尽管如此,
+    // 第一步的写操作对其它线程也是可见的. 
+    // 这是 Release-Acquire ordering 语义所保证的. 
     x->NoBarrier_SetNext(i, prev[i]->NoBarrier_Next(i));
     prev[i]->SetNext(i, x);
   }

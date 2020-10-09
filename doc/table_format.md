@@ -137,7 +137,7 @@ filter block 保存着一系列 filters, 其中 filter i 包含了 `FilterPolicy
 
     [ i*base ... (i+1)*base-1 ]
 
-当前, 上面的 base 是 2KB. 比如, 如果 block X 和 block Y 起始地址落在 `[ 0KB .. 2KB ]`  范围内, X 和 Y 中的全部 keys 将会在调用 `FilterPolicy::CreateFilter()` 时被转换为一个 filter, 然后这个 filter 会作为第一个(为啥是第一个, 因为 X、Y 起始地址落在第一个地址空间里) filter 被保存在 filter block 中. (用大白话再说一遍, 每个 FilterPolicy 都有一个唯一的名字, 在 metaindex block 通过这个名字就能找到对应的 filter block 了. 而 filter block 存的就是用这个 FilterPolicy 构造的一系列 filters, 为啥是一系列呢？因为 data blocks 太多了, 所以分了区间, 每几个 data blocks 对应一个 filter, 具体几个根据上面那个带 base 的公式来算. 再说说 filter 是怎么回事. data block 保存的不是键值对构成的 records 嘛, 根据前面说的键区间限制, 把每几个 blocks 的全部键根据某个 FilterPolicy 算一下就得到了一个 filter, 然后把这个 filter 保存到了 filter block 的第 i 个位置. )
+当前, 上面的 base 是 2KB. 比如, 如果 block X 和 block Y 起始地址落在 `[ 0KB .. 2KB ]`  范围内, X 和 Y 中的全部 keys 将会在调用 `FilterPolicy::CreateFilter()` 时被转换为一个 filter, 然后这个 filter 会作为第一个(为啥是第一个, 因为 X、Y 起始地址落在第一个地址空间里) filter 被保存在 filter block 中. (用大白话再说一遍, 每个 FilterPolicy 都有一个唯一的名字, 在 metaindex block 通过这个名字就能找到对应的 filter block 了. 而 filter block 存的就是用这个 FilterPolicy 构造的一系列 filters, 为啥是一系列呢? 因为 data blocks 太多了, 所以分了区间, 每几个 data blocks 对应一个 filter, 具体几个根据上面那个带 base 的公式来算. 再说说 filter 是怎么回事. data block 保存的不是键值对构成的 records 嘛, 根据前面说的键区间限制, 把每几个 blocks 的全部键根据某个 FilterPolicy 算一下就得到了一个 filter, 然后把这个 filter 保存到了 filter block 的第 i 个位置. )
 
 filter block 格式如下：
 

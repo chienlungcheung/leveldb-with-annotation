@@ -156,7 +156,7 @@ class Limiter {
 //
 // 通过系统调用 read() 实现顺序读. 
 //
-// 该类的实例是线程友好的(todo？)但不是线程安全的, 正如父类所要求的. 
+// 该类的实例是线程友好的(todo? )但不是线程安全的, 正如父类所要求的. 
 class PosixSequentialFile final : public SequentialFile {
  public:
   PosixSequentialFile(std::string filename, int fd)
@@ -214,7 +214,7 @@ class PosixRandomAccessFile final : public RandomAccessFile {
         filename_(std::move(filename)) {
     if (!has_permanent_fd_) {
       assert(fd_ == -1);
-      ::close(fd);  // The file will be opened on every read. todo 这里有关闭的必要吗？
+      ::close(fd);  // The file will be opened on every read. todo 这里有关闭的必要吗? 
     }
   }
 
@@ -883,7 +883,8 @@ void PosixEnv::Schedule(
     started_background_thread_ = true;
     std::thread background_thread(PosixEnv::BackgroundThreadEntryPoint, this);
     // 调用 detach 后, 线程执行部分与线程对象分离, 独立去运行, 线程对象不再拥有对执行部分的所有权. 
-    // 线程执行完毕会自动释放全部分配的资源. 
+    // 线程执行完毕会自动释放全部分配的资源. 所以一会 background_thread 出作用域被销毁也不影响
+    // 线程在后台运行.
     background_thread.detach();
   }
 

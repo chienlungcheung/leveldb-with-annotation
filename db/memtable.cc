@@ -91,21 +91,22 @@ Iterator* MemTable::NewIterator() {
 void MemTable::Add(SequenceNumber s, ValueType type,
                    const Slice& key,
                    const Slice& value) {
-  // Format of an entry is concatenation of:
-  //  key_size     : varint32 of internal_key.size()
-  //  key bytes    : char[internal_key.size()]
-  //  value_size   : varint32 of value.size()
-  //  value bytes  : char[value.size()]
-  //
-  // 插入到 memtable 的数据项的数据格式为(注意, memtable key 的构成与 LookupKey 一样):
-  // [varint32 类型的 internal_key_size, user_key, 序列号 + 操作类型, varint32 类型的 value_size, value]
+  // 插入到 memtable 的数据项的数据格式为
+  // (注意, memtable key 的构成与 LookupKey 一样, 
+  // 即 user_key + 序列号 + 操作类型):
+  // [varint32 类型的 internal_key_size, 
+  //  user_key, 
+  //  序列号 + 操作类型, 
+  //  varint32 类型的 value_size, 
+  //  value]
   // 其中, internal_key_size = user_key size + 8
   size_t key_size = key.size();
   size_t val_size = value.size();
   size_t internal_key_size = key_size + 8;
+  // 编码后的数据项总长度
   const size_t encoded_len =
       VarintLength(internal_key_size) + internal_key_size +
-      VarintLength(val_size) + val_size; // 编码后的数据项总长度
+      VarintLength(val_size) + val_size; 
   // 分配用来存储数据项的内存    
   char* buf = arena_.Allocate(encoded_len); 
   // 将编码为 varint32 格式的 internal_key_size 写入内存
@@ -113,60 +114,82 @@ void MemTable::Add(SequenceNumber s, ValueType type,
   // 将 user_key 写入内存
   memcpy(p, key.data(), key_size); 
   p += key_size;
+  // 将序列号和操作类型写入内存.
   // 注意, 序列号为高 7 个字节;  
   // 将序列号左移 8 位, 空出最低 1 个字节写入操作类型 type. 
-  EncodeFixed64(p, (s << 8) | type); // 将序列号和操作类型写入内存
+  EncodeFixed64(p, (s << 8) | type); 
   p += 8;
-  p = EncodeVarint32(p, val_size); // 将编码为 varint32 格式的 value_size 写入内存
-  memcpy(p, value.data(), val_size); // 将 value 写入内存
+  // 将编码为 varint32 格式的 value_size 写入内存
+  p = EncodeVarint32(p, val_size); 
+  // 将 value 写入内存
+  memcpy(p, value.data(), val_size); 
   assert(p + val_size == buf + encoded_len);
-  table_.Insert(buf); // 将数据项插入跳跃表
+  // 将数据项插入跳跃表
+  table_.Insert(buf); 
 }
 
 bool MemTable::Get(const LookupKey& key, std::string* value, Status* s) {
+  // LookupKey 结构同 internal key.
+  // 注意由于比较时, 当 userkey 一样时会继续比较序列号, 
+  // 而且序列号越大对应 key 越小, 所以外部调用 Get()
+  // 方法前用户组装 LookupKey 的时候, 传入的序列号不能小于
+  // MemTable 每个 key 的序列号. 外部具体实现是采用 DB 记录的最大
+  // 序列号.
   Slice memkey = key.memtable_key();
+  // 为底层的 skiplist 创建一个临时的迭代器
   Table::Iterator iter(&table_);
-  iter.Seek(memkey.data()); // 返回第一个大于等于 memkey 的数据项(数据项在 iter 内部存着)
-  if (iter.Valid()) { //iter 指向有效 node, 即 node 不为 nullptr
-    // entry format is:
+  // 返回第一个大于等于 memkey 的数据项(数据项在 iter 内部存着),
+  // 这里的第一个很关键, 当 userkey 相同但是序列号不同时, 序列号
+  // 大的那个 key 对应的数据更新, 同时由于 internal key 比较规则
+  // 是, userkey 相同序列号越大对应 key 越小, 所以 userkey 相同时
+  // 序列号最大的那个 key 肯定是第一个.
+  iter.Seek(memkey.data()); 
+  // iter 指向有效 node, 即 node 不为 nullptr
+  if (iter.Valid()) { 
+    // 每个数据项格式如下:
     //    klength  varint32
-    //    userkey  char[klength] // 这里有误, 应该是 klength - 8
+    //    userkey  char[klength-8] // 源码注释这里有误, 应该是 klength - 8
     //    tag      uint64
     //    vlength  varint32
     //    value    char[vlength]
-    // Check that it belongs to same user key.  We do not check the
-    // sequence number since the Seek() call above should have skipped
-    // all entries with overly large sequence numbers.
-    // 通过比较 user_key 部分和 ValueType 部分来确认是否是我们要找的 key. 
-    // 不去比较序列号的原因是上面调用 Seek() 的时候已经跳过了非常大的序列号(internal_key 比较逻辑是
-    // 序列号越大 internal_key 越小, 而我们通过 Seek() 寻找的是第一个大于等于某个 internal_key 的节点). todo 完善忽略序列号的理由论述. 
+    // 通过比较 user_key 部分和 ValueType 部分来确认是否是我们要找的数据项. 
+    // 不去比较序列号的原因是上面调用 Seek() 的时候已经跳过了非常大的序列号
+    // (internal_key 比较逻辑是序列号越大 internal_key 越小, 而我们
+    // 通过 Seek() 寻找的是第一个大于等于某个 internal_key 的节点).  
     //
-    // 注意, memtable 将底层的 SkipList 的 key(确切应该说是数据项)声明为了 char* 类型. 
-    // 这里的 entry 是 SkipList.Node 里包含的整个数据项. 
+    // 注意, memtable 将底层的 SkipList 的 key(确切应该说是数据项)
+    // 声明为了 char* 类型. 这里的 entry 是 SkipList.Node 里包含的整个数据项. 
     const char* entry = iter.key();
     uint32_t key_length;
-    const char* key_ptr = GetVarint32Ptr(entry, entry+5, &key_length); // 解析 internal_key 长度
+    // 解析 internal_key 长度
+    const char* key_ptr = GetVarint32Ptr(entry, entry+5, &key_length); 
     // 比较 user_key. 
-    // 因为 internal_key 包含了 tag 所以任意两个 internal_key 肯定是不一样的, 而我们真正在意的是 user_key, 
+    // 因为 internal_key 包含了 tag 所以任意两个 internal_key 
+    // 肯定是不一样的, 而我们真正在意的是 user_key, 
     // 所以这里调用 user_comparator 比较 user_key. 
     if (comparator_.comparator.user_comparator()->Compare(
             Slice(key_ptr, key_length - 8),
             key.user_key()) == 0) {
-      // Correct user key
-      const uint64_t tag = DecodeFixed64(key_ptr + key_length - 8); // 解析 tag
+      // 解析 tag, 包含 7 字节序列号和 1 字节操作类型(新增/删除)
+      const uint64_t tag = DecodeFixed64(key_ptr + key_length - 8);
       // 解析 tag 中的 ValueType. 
-      // leveldb 删除某个 user_key 的时候不是通过一个写操作实现的吗？那怎么确保在 SkipList.Seek() 时候返回删除操作对应的数据项, 
-      // 而不是之前同样 user_key 对应的真正的插入操作对应的数据项呢？
-      // 机巧就在于 internal_key 的比较原理 user_key 相等的时候, tag 越大 internal_key 越小, 
-      // 这样后执行的删除操作的 tag(序列号递增了, 即使不递增, 但由于删除对应的 ValueType 大于插入对应的 ValueType 也可以确保
+      // leveldb 删除某个 user_key 的时候不是通过一个插入墓碑消息实现的吗? 
+      // 那怎么确保在 SkipList.Seek() 时候返回删除操作对应的数据项, 
+      // 而不是之前同样 user_key 对应的真正的插入操作对应的数据项呢? 
+      // 机巧就在于 internal_key 的比较原理 user_key 相等的时候, 
+      // tag 越大 internal_key 越小, 
+      // 这样后执行的删除操作的 tag(序列号递增了, 即使不递增, 但由于
+      // 删除对应的 ValueType 大于插入对应的 ValueType 也可以确保
       // 后执行的删除操作的 tag 大于先执行的插入操作的 tag)
       // 这里有个比较技巧的地方. 
       switch (static_cast<ValueType>(tag & 0xff)) {
+        // 找到了
         case kTypeValue: {
           Slice v = GetLengthPrefixedSlice(key_ptr + key_length);
           value->assign(v.data(), v.size());
           return true;
         }
+        // 找到了, 但是已经被删除了
         case kTypeDeletion:
           *s = Status::NotFound(Slice());
           return true;
