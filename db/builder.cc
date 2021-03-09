@@ -58,7 +58,7 @@ Status BuildTable(const std::string& dbname,
 
     // Finish and check for builder errors
     // 将 TableBuilder 中的数据按照 table 文件的格式写入到文件, 
-    // table 文件构成：data blocks, filter block, metaindex block, index block
+    // table 文件构成: data blocks, filter block, metaindex block, index block
     s = builder->Finish();
     if (s.ok()) {
       // 写成功, 将 table 文件大小保存到 meta->file_size

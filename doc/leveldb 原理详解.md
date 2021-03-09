@@ -160,7 +160,7 @@ virtual void ReleaseSnapshot(const Snapshot* snapshot) = 0;
  * DB 实现可以通过该方法导出自身状态相关的属性. 如果提供的属性可以被 DB 实现理解, 那么第二个参数将会
  * 存储该属性对应的当前值同时该方法返回 true, 其它情况该方法返回 false. 
  *
- * 合法的属性名称包括：
+ * 合法的属性名称包括: 
  *
  * "leveldb.num-files-at-level<N>" - 返回 level <N> 的文件个数, 其中 <N> 是一个 ASCII 格式的数字. 
  *
@@ -203,7 +203,7 @@ virtual void GetApproximateSizes(const Range* range, int n,
  * 尤其是, 压实过程会将已经删除或者复写过的数据会被丢弃, 同时会将数据重新安放以减少后续数据访问操作的成本. 
  * 这个操作是为那些理解底层实现的用户准备的. 
  *
- * 如果 begin==nullptr, 则从第一个键开始; 如果 end==nullptr 则到最后一个键为止. 所以, 如果像下面这样做则意味着压紧整个数据库：
+ * 如果 begin==nullptr, 则从第一个键开始; 如果 end==nullptr 则到最后一个键为止. 所以, 如果像下面这样做则意味着压紧整个数据库: 
  *
  * db->CompactRange(nullptr, nullptr);
  * @param begin 起始键
@@ -224,7 +224,7 @@ virtual void CompactRange(const Slice* begin, const Slice* end) = 0;
 
 log 文件内容是一系列 blocks, 每个 block 大小为 32KB. 唯一的例外就是, log 文件末尾可能包含一个不完整的 block. 
 
-每个 block 由一系列 records 构成：
+每个 block 由一系列 records 构成: 
 
     // 即 0 或多个 records, 0 或 1 个 trailer.
     // 最大为 32768 字节.
@@ -254,15 +254,15 @@ FULL 类型的 record 包含了一个完整的用户 record 的内容.
 
 FIRST、MIDDLE、LAST 这三个类型用于被分割成多个 fragments(典型的理由是某个 record 跨越了多个 block 边界) 的用户 record. FIRST 表示某个用户 record 的第一个 fragment, LAST 表示某个用户 record 的最后一个 fragment, MIDDLE 表示某个用户 record 的中间 fragments. 
 
-举例：考虑下面一系列用户 records：
+举例: 考虑下面一系列用户 records: 
 
-    A：长度 1000
-    B：长度 97270
-    C：长度 8000 
+    A: 长度 1000
+    B: 长度 97270
+    C: 长度 8000 
 
 **A** 会被作为 FULL 类型的 record 存储到第一个 block, 第一个 block 剩余空间为 32768 - 7 - 1000 = 31761; 
 
-**B** 会被分割为 3 个 fragments：第一个 fragment 占据第一个 block 剩余空间, 共存入 31761 - 7 = 31754, 剩余 65516; 第二个 fragment 占据第二个 block 的全部空间, 存入 32768 - 7 = 32761, 剩余 65516 - 32761 = 32755; 第三个 fragment 占据第三个 block 的起始空间共 7 + 32755 = 32762. 所以最后在第三个 block 剩下 32768 - 32762 = 6 个字节, 这几个字节会被填充 0 作为 trailer. 
+**B** 会被分割为 3 个 fragments: 第一个 fragment 占据第一个 block 剩余空间, 共存入 31761 - 7 = 31754, 剩余 65516; 第二个 fragment 占据第二个 block 的全部空间, 存入 32768 - 7 = 32761, 剩余 65516 - 32761 = 32755; 第三个 fragment 占据第三个 block 的起始空间共 7 + 32755 = 32762. 所以最后在第三个 block 剩下 32768 - 32762 = 6 个字节, 这几个字节会被填充 0 作为 trailer. 
 
 **C** 将会被作为 FULL 类型的 record 存储到第四个 block 中. 
 
@@ -270,14 +270,14 @@ MANIFEST 文件的格式同 log 文件, 只是记录的具体内容不同, 前�
 
 #### log 文件格式的好处
 
-log 文件格式的好处是(总结一句话就是容易划分边界)：
+log 文件格式的好处是(总结一句话就是容易划分边界): 
 
 1. 不必进行任何启发式地 resyncing(可以理解为寻找一个 block 的边界) —— 直接跳到下个 block 边界进行扫描即可, 因为每个 block 大小是固定的(32768 个字节, 除非文件尾部的 block 未写满). 如果数据有损坏, 直接跳到下个 block. 这个文件格式的附带好处是, 当一个 log 文件的部分内容作为一个 record 嵌入到另一个 log 文件时(即当一个逻辑 record 分为多个物理 records, 一部分 records 位于前一个 log 文件, 剩下 records 位于下个 log 文件), 我们不会分不清楚. 
-2. 在估计出来的边界处做分割(比如为 mapreduce 应用)变得简单了：找到下个 block 的边界, 如果起始是 MIDDLE 或者 LAST 类型的 record, 则跳过直到我们找到一个 FULL 或者 FIRST record 为止, 就可以在此处做分割, 一部分投递到一个计算任务, 另一部分(直到分界处)投递到另一个计算任务.
+2. 在估计出来的边界处做分割(比如为 mapreduce 应用)变得简单了: 找到下个 block 的边界, 如果起始是 MIDDLE 或者 LAST 类型的 record, 则跳过直到我们找到一个 FULL 或者 FIRST record 为止, 就可以在此处做分割, 一部分投递到一个计算任务, 另一部分(直到分界处)投递到另一个计算任务.
 
 #### log 文件的缺点(并不是)
 
-log 文件格式的缺点：
+log 文件格式的缺点: 
 
 1. 没有打包小的 records. 通过增加一个新的 record 类型可以解决这个问题, 所以这个问题是当前实现的不足而不是 log 格式的缺陷. 
 2. 没有压缩. 再说一遍, 这个可以通过增加一个新的 record 类型来解决. 

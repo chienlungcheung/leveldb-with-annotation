@@ -51,7 +51,7 @@ class LEVELDB_EXPORT FilterPolicy {
   // keys[0,n-1] 包含了一个键列表(可能有重复的), 这些键已经按照用户提供的比较器被排序了. 
   // 该方法会针对 keys[0,n-1] 全部 keys 计算得到一个过滤器, 并将该过滤器对应的位图追加到 *dst 中. 
   //
-  // 警告：不要修改 *dst 的初始内容, 相反, 追加新构造的过滤器到 *dst 中. 
+  // 警告: 不要修改 *dst 的初始内容, 相反, 追加新构造的过滤器到 *dst 中. 
   virtual void CreateFilter(const Slice* keys, int n, std::string* dst)
       const = 0;
 
@@ -89,7 +89,7 @@ class LEVELDB_EXPORT FilterPolicy {
 //
 // 当使用该过滤策略的数据库都关闭后, 调用者必须删除该策略. 
 //
-// 注意：如果你正在使用一个定制的 comparator, 而且它忽略了被比较的 keys 的某些部分, 
+// 注意: 如果你正在使用一个定制的 comparator, 而且它忽略了被比较的 keys 的某些部分, 
 // 你不能使用 NewBloomFilterPolicy() 并且需要提供你自己的 FilterPolicy, 
 // 而且该策略忽略了被 comparator 忽略的部分. 比如, 如果 comparator 忽略了了尾部的空格, 
 // 那么使用一个不忽略 keys 尾部空格的过滤器策略(比如 NewBloomFilterPolicy)就错了. 

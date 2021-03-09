@@ -15,16 +15,18 @@ namespace leveldb {
 Status WriteStringToFileSync(Env* env, const Slice& data,
                              const std::string& fname);
 
-// 将指定的 dbname、number 和后缀拼接生成一个字符串形式的文件名
+// 将指定的 dbname、number 和后缀拼接生成一个字符串形式的文件路径名(相对路径, 形如 dbname/xxxxxx.log)
 static std::string MakeFileName(const std::string& dbname, uint64_t number,
                                 const char* suffix) {
   char buf[100];
+  // 文件号是个 6 位数, 固定长度, 长度不够前面填充 0.
   snprintf(buf, sizeof(buf), "/%06llu.%s",
            static_cast<unsigned long long>(number),
            suffix);
   return dbname + buf;
 }
 
+// 将指定的 dbname、number 和后缀拼接生成一个字符串形式的文件路径名(相对路径, 形如 dbname/xxxxxx.log)
 std::string LogFileName(const std::string& dbname, uint64_t number) {
   assert(number > 0);
   return MakeFileName(dbname, number, "log");

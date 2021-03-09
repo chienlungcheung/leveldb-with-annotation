@@ -27,10 +27,10 @@ static size_t TargetFileSize(const Options* options) {
 
 // Maximum bytes of overlaps in grandparent (i.e., level+2) before we
 // stop building a single file in a level->level+1 compaction.
-// 压实过程：
+// 压实过程: 
 //    当 level-L 大小超过了上限, 我们就在后台线程中将其压实. 
 //    压实过程会从 level-L 挑一个文件, 然后将 level-(L+1) 中与该文件键区间重叠的文件都找出来. 
-// 一次压实会合并多个被挑选文件的内容从而生成一系列新的 level-(L+1) 文件, 生成一个新文件的条件有两个：
+// 一次压实会合并多个被挑选文件的内容从而生成一系列新的 level-(L+1) 文件, 生成一个新文件的条件有两个: 
 //    - 当前文件大小达到了 2MB
 //    - 当前文件的键区间与超过 10 个 level-(L+2) 文件发生了重叠. 
 // 第二个条件的目的在于避免后续对 level-(L+1) 文件进行压实时需要从 level-(L+2) 读取过多的数据. 
@@ -54,7 +54,7 @@ static int64_t ExpandedCompactionByteSizeLimit(const Options* options) {
 static double MaxBytesForLevel(const Options* options, int level) {
   // Note: the result for level zero is not really used since we set
   // the level-0 compaction threshold based on number of files.
-  // 注意：这里的 result 对 level-0 没有用处, 
+  // 注意: 这里的 result 对 level-0 没有用处, 
   // 因为针对 level-0 的压实阈值基于文件个数, 默认是超过 4 个就触发. 
 
   // Result for both level-0 and level-1
@@ -277,7 +277,7 @@ static Iterator* GetFileIterator(void* arg,
   }
 }
 
-// 构造指定 level 层文件列表的双层迭代器：
+// 构造指定 level 层文件列表的双层迭代器: 
 // - 第一层迭代器(LevelFileNumIterator)指向文件; 
 // - 第二层迭代器指向某个 table 文件具体内容, 其实它也是一个双层迭代器. 
 Iterator* Version::NewConcatenatingIterator(const ReadOptions& options,
@@ -294,7 +294,7 @@ Iterator* Version::NewConcatenatingIterator(const ReadOptions& options,
 // 将当前 version 维护的 level 架构中每一个 sorted table 文件对应的迭代器
 // 追加到 iters 向量里, 这些迭代器加上 memtable 的迭代器, 就能
 // 遍历整个数据库的内容了. 
-// 前提：当前 Version 对象事先已经通过 VersionSet::SaveTo 方法被保存过了. 
+// 前提: 当前 Version 对象事先已经通过 VersionSet::SaveTo 方法被保存过了. 
 void Version::AddIterators(const ReadOptions& options,
                            std::vector<Iterator*>* iters) {
   // Merge all level zero files together since they may overlap
@@ -658,10 +658,10 @@ int Version::PickLevelForMemTableOutput(
     InternalKey start(smallest_user_key, kMaxSequenceNumber, kValueTypeForSeek);
     InternalKey limit(largest_user_key, 0, static_cast<ValueType>(0));
     std::vector<FileMetaData*> overlaps;
-    // 压实过程：
+    // 压实过程: 
     //    当 level-L 大小超过了上限, 我们就在后台线程中将其压实. 
     //    压实过程会从 level-L 挑一个文件, 然后将 level-(L+1) 中与该文件键区间重叠的文件都找出来. 
-    // 一次压实会合并多个被挑选文件的内容从而生成一系列新的 level-(L+1) 文件, 生成一个新文件的条件有两个：
+    // 一次压实会合并多个被挑选文件的内容从而生成一系列新的 level-(L+1) 文件, 生成一个新文件的条件有两个: 
     //    - 当前文件大小达到了 2MB
     //    - 当前文件的键区间与超过 10 个 level-(L+2) 文件发生了重叠. 
     // 第二个条件的目的在于避免后续对 level-(L+1) 文件进行压实时需要从 level-(L+2) 读取过多的数据. 
@@ -781,7 +781,7 @@ std::string Version::DebugString() const {
 class VersionSet::Builder {
  private:
   // Helper to sort by v->files_[file_number].smallest
-  // 辅助类：用于基于 v->files_[file_number].smallest 进行排序
+  // 辅助类: 用于基于 v->files_[file_number].smallest 进行排序
   struct BySmallestKey {
     const InternalKeyComparator* internal_comparator;
 
@@ -861,6 +861,7 @@ class VersionSet::Builder {
     // Update compaction pointers
     for (size_t i = 0; i < edit->compact_pointers_.size(); i++) {
       const int level = edit->compact_pointers_[i].first;
+      // 与下面新增和删除不同, 这里直接修改 vset
       vset_->compact_pointer_[level] =
           edit->compact_pointers_[i].second.Encode().ToString();
     }
@@ -898,10 +899,10 @@ class VersionSet::Builder {
       // same as the compaction of 40KB of data.  We are a little
       // conservative and allow approximately one seek for every 16KB
       // of data before triggering a compaction.
-      // 经过一定次数查询后再自动进行压实操作. 我们假设：
+      // 经过一定次数查询后再自动进行压实操作. 我们假设: 
       //    (1)一次查询消耗 10ms
       //    (2)写或者读 1MB 数据消耗 10ms(即 100MB/s, 这是一般磁盘 IO 速度)
-      //    (3)1MB 数据的压实做了 25MB 数据的 IO 工作：
+      //    (3)1MB 数据的压实做了 25MB 数据的 IO 工作: 
       //        从 level-L 读取了 1MB
       //        从 level-(L+1) 读取了 10-12MB(边界可能没有对齐)重叠数据
       //        将压实后的 10-12MB 数据写入到 level-(L+1)
@@ -926,7 +927,7 @@ class VersionSet::Builder {
   void SaveTo(Version* v) {
     BySmallestKey cmp;
     cmp.internal_comparator = &vset_->icmp_;
-    // 将每个 level 的 base_ 和 LevelState 合并到 v 的对应 level 中
+    // 从低到高将每个 level 的 base_ 和 LevelState 合并到 v 的对应 level 中
     for (int level = 0; level < config::kNumLevels; level++) {
       // Merge the set of added files with the set of pre-existing files.
       // Drop any deleted files.  Store the result in *v.
@@ -939,13 +940,14 @@ class VersionSet::Builder {
       // 将 Version v 中 level-L 对应的文件列表大小扩张为 Version base_ 
       // 中 level-L 对应的文件列表大小加上 level-L 对应的新增文件集合大小
       v->files_[level].reserve(base_files.size() + added->size());
-      // 下面两个循环按照从小到大顺序合并 level-L 对应的 base_ 文件列表和 LevelState 新增文件列表
+      // 下面两个循环按照文件包含的 key 从小到大顺序合并 level-L 对应的 base_ 文件列表
+      // 和 builder.LevelState 新增文件列表.
       for (FileSet::const_iterator added_iter = added->begin();
            added_iter != added->end();
            ++added_iter) {
         // Add all smaller files listed in base_
         // 针对每个新增文件 *added_iter, 
-        // 从 base_ 的 level-L 对应的当前文件列表中寻找第一个大于它的文件, 寻找过程采用 cmp 比较器
+        // 从 base_ 的 level-L 对应的当前文件列表中寻找第一个大于它的文件, 寻找过程采用 BySmallestKey 比较器
         for (std::vector<FileMetaData*>::const_iterator bpos
                  = std::upper_bound(base_iter, base_end, *added_iter, cmp);
              base_iter != bpos;
@@ -964,10 +966,12 @@ class VersionSet::Builder {
         MaybeAddFile(v, level, *base_iter);
       }
 // NDEBUG disables standard-C assertions
+// 下面代码用来断言合并结果 V 中大于 0 的 level 的文件不存在重叠
 #ifndef NDEBUG
       // Make sure there is no overlap in levels > 0
       // 确保 Version v 中大于 0 的 level-L 内部文件之间不互相重叠
       if (level > 0) {
+        // 注意 i 从 1 开始
         for (uint32_t i = 1; i < v->files_[level].size(); i++) {
           // 前一个文件的最大 key
           const InternalKey& prev_end = v->files_[level][i-1]->largest;
@@ -995,12 +999,13 @@ class VersionSet::Builder {
       std::vector<FileMetaData*>* files = &v->files_[level];
       if (level > 0 && !files->empty()) {
         // Must not overlap
-        // 确保新加入的 f 与当前文件列表最后的文件(也是 smallest 和 largest 最大的文件)没有重叠
+        // 确保新加入的 f 的最小 key 大于当前文件列表最后的文件的最大 key
         assert(vset_->icmp_.Compare((*files)[files->size()-1]->largest,
                                     f->smallest) < 0);
       }
       // 将 f 引用计数加一并将其加入到 Version v 的文件列表中
       f->refs++;
+      // 将 f 追加到文件列表后
       files->push_back(f);
     }
   }
@@ -1024,7 +1029,7 @@ VersionSet::VersionSet(const std::string& dbname,
       descriptor_log_(nullptr),
       dummy_versions_(this),
       current_(nullptr) {
-  // 用一个 Version(未包含实际内容)替换当前 current_
+  // 用一个新 Version(未包含实际内容)替换当前 current_
   AppendVersion(new Version(this));
 }
 
@@ -1047,18 +1052,20 @@ void VersionSet::AppendVersion(Version* v) {
   v->Ref();
 
   // Append to linked list
-  // 将 v 加入到双向循环链表中
+  // 将 v 加入到双向循环链表中, 新插入的永远是 dummy_versions_ 的前驱.
   v->prev_ = dummy_versions_.prev_;
   v->next_ = &dummy_versions_;
   v->prev_->next_ = v;
   v->next_->prev_ = v;
 }
 
-// 将 *edit 内容和当前 version 内容合并构成一个新的 version, 然后将这个
-// 新 version 内容序列化为一条日志写到新建的 manifest 文件, 同时将该 manifest
-// 文件名写入 current 文件. 最后把新的 version 替换当前 version.
-// 前提：*mu 在进入方法之前就被持有了. 
-// 前提：没有其它线程并发调用该方法. 
+// 1, 将 *edit 内容(可看作当前针对 level 架构的增量更新)和当前 version 内容合并构成一个新的 version;
+// 2, 然后将这个新 version 内容序列化为一条日志写到新建的 manifest 文件;
+// 3, 同时将该 manifest 文件名写入 current 文件;
+// 4, 最后把新的 version 替换当前 version.
+//
+// 前提: *mu 在进入方法之前就被持有了. 
+// 前提: 没有其它线程并发调用该方法. 
 Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
   if (edit->has_log_number_) {
     assert(edit->log_number_ >= log_number_);
@@ -1077,9 +1084,9 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
   // 新建一个 Version 用于存储 Builder 输出
   Version* v = new Version(this);
   {
-    // 将当前 version 作为输入构建一个新的 Builder
+    // 将当前 VersionSet 及其 current version 作为输入构建一个新的 Builder
     Builder builder(this, current_);
-    // 将 VersionEdit 与当前 Version 内容合并
+    // 将新的 VersionEdit 与 current version 内容合并
     builder.Apply(edit);
     // 将 Builder 内容输出到 Version v 中
     builder.SaveTo(v);
@@ -1096,13 +1103,16 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
   if (descriptor_log_ == nullptr) {
     // No reason to unlock *mu here since we only hit this path in the
     // first call to LogAndApply (when opening the database).
+    // 因为仅仅在打开数据库时才会走到这里, 所以没必要持有锁, 毕竟数据库不打开
+    // 任何线程都无法进行读写.
     assert(descriptor_file_ == nullptr);
+    // manifest 文件又叫 descriptor 文件
     new_manifest_file = DescriptorFileName(dbname_, manifest_file_number_);
     edit->SetNextFile(next_file_number_);
     s = env_->NewWritableFile(new_manifest_file, &descriptor_file_);
     if (s.ok()) {
       descriptor_log_ = new log::Writer(descriptor_file_);
-      // 将 versionset 当前 version 维护的 level 架构数据与 edit 合并后序列化到 manifest 文件
+      // 将当前 Version 保存的 level 架构信息保存到一个新 VersionEdit 中后将其序列化到 MANIFEST 文件.
       s = WriteSnapshot(descriptor_log_);
     }
   }
@@ -1112,8 +1122,7 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
     mu->Unlock();
 
     // Write new record to MANIFEST log
-    // todo 如果 descriptor_log_ 上面为空, 则新建其后在 WriteSnapshot 执行过写 manifest 文件了, 
-    // 这里再写就重了.
+    // 将通过参数传入的 VersionEdit 记录到 manifest 文件. 这个地方相对于上面的 snapshot 相当于是一个增量.
     if (s.ok()) {
       std::string record;
       edit->EncodeTo(&record);
@@ -1128,7 +1137,7 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
 
     // If we just created a new descriptor file, install it by writing a
     // new CURRENT file that points to it.
-    // 如果 manifest 文件是新建的, 则这里需要将其w文件名保存到 current 文件中.
+    // 如果 manifest 文件是新建的, 则这里需要将其文件名保存到 current 文件中.
     if (s.ok() && !new_manifest_file.empty()) {
       s = SetCurrentFile(env_, dbname_, manifest_file_number_);
     }
@@ -1136,9 +1145,10 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
     mu->Lock();
   }
 
-  // Install the new version
+  // 更新 VersionSet 中的 current_ version.
   if (s.ok()) {
-    // 将新构建的 version 插入到 versionset 作为当前 version
+    // 将基于当前 Version 和增量 VersionEdit 构建的新 version 
+    // 插入到 versionset 替换当前 version. 它是最新的 level 架构.
     AppendVersion(v);
     log_number_ = edit->log_number_;
     prev_log_number_ = edit->prev_log_number_;
@@ -1298,7 +1308,8 @@ Status VersionSet::Recover(bool *save_manifest) {
   return s;
 }
 
-// 确认当前的 MANIFEST 是否可以重用, 如果超过大小上限(2MB) 就不能重用了, 返回 false;
+// 确认当前的 MANIFEST 是否可以重用, 如果超过大小上限(2MB, 防止太大导致重启时重建 level 耗时过多做无用操作, 具体见 Recover)
+// 就不能重用了, 返回 false;
 // 如果不存在 MANIFEST 文件则新建一个, 成功返回 true, 否则返回 false.
 bool VersionSet::ReuseManifest(const std::string& dscname,
                                const std::string& dscbase) {
@@ -1312,7 +1323,8 @@ bool VersionSet::ReuseManifest(const std::string& dscname,
       manifest_type != kDescriptorFile ||
       !env_->GetFileSize(dscname, &manifest_size).ok() ||
       // Make new compacted MANIFEST if old one is too big
-      // manifest 文件大小超过阈值就不能重用了, 目前上限是 2MB
+      // manifest 文件大小超过阈值就不能继续向里面写了, 目前上限是 2MB.
+      // 如果太大, 则数据库每次启动重建 level 架构耗时会非常长, 而且会做太多无用工作.
       manifest_size >= TargetFileSize(options_)) {
     return false;
   }
@@ -1341,7 +1353,7 @@ void VersionSet::MarkFileNumberUsed(uint64_t number) {
 }
 
 // 计算 Version v 下个最适合做压实的 level, 保存到 v 中.
-// 计算逻辑如下：
+// 计算逻辑如下: 
 // - 针对 level-0, 计算当前文件个数相对上限的比值
 // - 针对其它 levels, 计算每个 level 当前字节数相对于其上限的比值
 // 上述比值最大的那个 level 即为下个适合进行压实的 level. 
@@ -1367,7 +1379,7 @@ void VersionSet::Finalize(Version* v) {
       // setting, or very high compression ratios, or lots of
       // overwrites/deletions).
       //
-      // 我们会特殊对待 level-0, 即限制文件数目而不是字节数目, 原因有二：
+      // 我们会特殊对待 level-0, 即限制文件数目而不是字节数目, 原因有二: 
       // (1)写缓冲空间越大, 越不用去做太多的 level-0 压实. 
       // (2)每次读取的时候都会对 level-0 文件做合并, 因此当单个文件很小(可能因为写缓冲设置的太小或者太高的压缩比或者太多的覆写或者删除)
       // 的时候我们希望避免产生太多的文件. 
@@ -1393,6 +1405,7 @@ void VersionSet::Finalize(Version* v) {
   v->compaction_score_ = best_score;
 }
 
+// 将当前 Version 保存的 level 架构信息保存到一个新 VersionEdit 中后将其序列化到 MANIFEST 文件.
 // 将当前 versionset 维护的当前 version 的每个 level 的下次压实起始 key 以及每个 level 的
 // 文件列表全都追加到 versionedit 中, 然后将 versionedit 序列化成一条日志记录到 manifest 文件.
 // 该方法类似 VersionSet::Builder::SaveTo 方法, 不过这里是把当前 version 信息追加到 versionedit 中,
@@ -1496,13 +1509,18 @@ uint64_t VersionSet::ApproximateOffsetOf(Version* v, const InternalKey& ikey) {
 // 从旧到新遍历 version(因为新 version 是其前一个 version 合并 versionedit 构造的), 
 // 在每个 version 中从低到高遍历 level(针对同样的 key, level 越低其对应数据越新),
 // 将 level 中的文件都插入到集合 live 中.
+// 注意, 虽然这里强调了顺序的特点, 但是由于 live 是个集合, 集合本身无序, 所以这些特点在这里无意义.
 void VersionSet::AddLiveFiles(std::set<uint64_t>* live) {
+  // 逐个 version, 从老到新
   for (Version* v = dummy_versions_.next_;
        v != &dummy_versions_;
        v = v->next_) {
+    // 逐个 level, 从低到高     
     for (int level = 0; level < config::kNumLevels; level++) {
       const std::vector<FileMetaData*>& files = v->files_[level];
+      // 逐个文件
       for (size_t i = 0; i < files.size(); i++) {
+        // 添加到 live 集合中
         live->insert(files[i]->number);
       }
     }

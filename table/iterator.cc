@@ -6,12 +6,14 @@
 
 namespace leveldb {
 
+// 构造方法, 初始化唯一数据成员
 Iterator::Iterator() {
   cleanup_head_.function = nullptr;
   cleanup_head_.next = nullptr;
 }
 
 Iterator::~Iterator() {
+  // 析构时调用已注册的清理函数
   if (!cleanup_head_.IsEmpty()) {
     // 线性的, 如果在该迭代器上注册的清理函数太多了应该会影响性能, 但总要做释放操作, 时间总归省不了.
     cleanup_head_.Run();
@@ -32,6 +34,7 @@ void Iterator::RegisterCleanup(CleanupFunction func, void* arg1, void* arg2) {
     node = &cleanup_head_;
   } else {
     node = new CleanupNode();
+    // 新节点插到 head 后面
     node->next = cleanup_head_.next;
     cleanup_head_.next = node;
   }

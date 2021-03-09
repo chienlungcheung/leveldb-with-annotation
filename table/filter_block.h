@@ -30,7 +30,7 @@ class FilterPolicy;
 // FilterBlockBuilder 用于构造 table 的全部 filters. 
 // 最后生成一个字符串保存在 Table 的一个 meta block 中. 
 //
-// 该类方法调用序列必须满足下面的正则表达式：
+// 该类方法调用序列必须满足下面的正则表达式: 
 //      (StartBlock AddKey*)* Finish
 // 最少调用一次 Finish, 而且 AddKey 和 Finish 之间不能插入 StartBlock 调用. 
 class FilterBlockBuilder {
@@ -60,23 +60,27 @@ class FilterBlockBuilder {
   void operator=(const FilterBlockBuilder&);
 };
 
-// 与 FilterBlockBuilder 相反, 将一个 filter block 解析出来, 然后用来查询某个 key 是否在某个 block 中
+// 与 FilterBlockBuilder 相反, 将一个 filter block 解析出来, 
+// 然后用来查询某个 key 是否在某个 block 中.
 class FilterBlockReader {
  public:
- // REQUIRES: "contents" and *policy must stay live while *this is live.
+  // 使用一个 FilterPolicy 和一个 filter block 构造一个 FilterBlockReader. 
+  // 注意两个参数生命期非常关键, 因为直接存的地址, 它们不能先于此处构造的对象死掉. 
   FilterBlockReader(const FilterPolicy* policy, const Slice& contents);
   bool KeyMayMatch(uint64_t block_offset, const Slice& key);
 
  private:
   const FilterPolicy* policy_;
   // 指向 filter block 起始地址
-  const char* data_;    // Pointer to filter data (at block-start)
-  // 指向 filter block 尾部 offset array 的起始地址
-  const char* offset_;  // Pointer to beginning of offset array (at block-end)
-  // offset array 元素个数
-  size_t num_;          // Number of entries in offset array
-  // base 的 log, 位于 filter block 最后一个字节, 具体见 table_format.md 介绍
-  size_t base_lg_;      // Encoding parameter (see kFilterBaseLg in .cc file)
+  const char* data_;
+  // 指向 filter block 尾部 offset array 的起始地址, 
+  // 这也是 filter block 的末尾.
+  const char* offset_; 
+  // offset array 中的元素个数
+  size_t num_;
+  // base 的 log, 位于 filter block 最后一个字节, 
+  // 具体见 .cc 文件 kFilterBaseLg 介绍.
+  size_t base_lg_;
 };
 
 }

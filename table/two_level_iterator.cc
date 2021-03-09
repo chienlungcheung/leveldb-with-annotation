@@ -13,23 +13,27 @@ namespace leveldb {
 
 namespace {
 
+// 可构造迭代器的函数(具体使用时是用来基于输入参数构造某个 data block 的迭代器)
 typedef Iterator* (*BlockFunction)(void*, const ReadOptions&, const Slice&);
 
-// 两级迭代器, 这个设计比较巧妙, 但也是由 table 文件结构决定的. 
+// 两级迭代器, 这个设计比较巧妙, 但也是由 sstable 文件结构决定的. 
 //
 // 要想找到某个 <key, value> 对, 肯定先要找到其对应的 data Block, 而要找的 data Block
 // 就要先在 index block 找到对应的 BlockHandle. 
 // 这个类就是这个寻找过程的实现. 
 //
-// 该类包含两个迭代器封装：
+// 该类包含两个迭代器封装: 
 // - 一个是 index_iter_, 它指向 index block 数据项. 
-//   针对每个 data block 都有一个对应的 entry 包含在 index block 中：
+//   针对每个 data block 都有一个对应的 entry 包含在 index block 中: 
 //    - 其中 key 为大于等于对应 data block 最后(也是最大的, 因为排序过了)
 //      一个 key 同时小于接下来的 data block 的第一个 key 的(比较拗口)字符串; 
 //    - value 是指向一个对应 data block 的 BlockHandle. 
 // - 另一个是 data_iter_, 它指向 data block 的数据项, 
 //   至于这个 data block 是否与 index_iter_ 所指数据项对应 data block 一致, 
 //   那要看实际情况, 不过即使不一致也无碍. 
+// 这两个迭代器, 可以把 index_iter 看作钟表的时针, 指向具体小时, 
+// 可以把 data_iter_ 看作更精细的分针, 指向当前小时的具体分钟.
+// 两个指针一起配合精确定位到我们要查询的数据项.
 class TwoLevelIterator: public Iterator {
  public:
   TwoLevelIterator(
@@ -78,25 +82,29 @@ class TwoLevelIterator: public Iterator {
   void SkipEmptyDataBlocksBackward();
   void SetDataIterator(Iterator* data_iter);
   void InitDataBlock();
-
-  BlockFunction block_function_; // 具体实现见 Table::BlockReader
+  
+  // 具体实现见 Table::BlockReader,
+  // 用于构造指向某个 data block 的迭代器.
+  BlockFunction block_function_; 
   void* arg_;
   const ReadOptions options_;
   Status status_;
   // 指向 index block 数据项的迭代器 wrapper. 
-  // 针对每个 data block 都有一个对应的 entry 包含在 index block 中：
-  // - 其中 key 为大于等于对应 data block 最后(也是最大的, 因为排序过了)一个 key
-  //    同时小于接下来的 data block 的第一个 key 的字符串; 
+  // 针对每个 data block 都有一个对应的 entry 包含在 index block 中: 
+  // - 其中 key 为大于等于对应 data block 最后(也是最大的, 因为排序过了)
+  //   一个 key 同时小于接下来的 data block 的第一个 key 的字符串; 
   // - value 是指向一个对应 data block 的 BlockHandle. 
   IteratorWrapper index_iter_;
-  // 与 index_iter_ 指向对应的 data block(或之后 data block, 因为 data_iter_ 调用 Next 会后移)
-  // 的数据项的迭代器
+  // 与 index_iter_ 指向对应的 data block(或之后 data block, 
+  // 因为 data_iter_ 调用 Next 会后移) 的数据项的迭代器
   IteratorWrapper data_iter_; // May be nullptr
   // If data_iter_ is non-null, then "data_block_handle_" holds the
   // "index_value" passed to block_function_ to create the data_iter_.
   //
-  // 如果 data_iter_ 不为空, 则下面的成员将会持有要传给 block_function_ 的 index_value, 
-  // block_function_ 会把它转换为一个指向某个 block 的迭代器 data_iter_(具体见 Table::BlockReader). 
+  // 如果 data_iter_ 不为空, 则下面的成员将会持有
+  // 要传给 block_function_ 的 index_value, 
+  // block_function_ 会把它转换为一个指向某个 block 的
+  // 迭代器 data_iter_(具体见 Table::BlockReader). 
   std::string data_block_handle_;
 };
 
@@ -119,10 +127,16 @@ TwoLevelIterator::~TwoLevelIterator() {
 void TwoLevelIterator::Seek(const Slice& target) {
   // 因为 index block 每个数据项的 key 是对应 data block 中最大的那个 key, 
   // 所以 index block 数据项也是有序的, 不过比较"宏观" . 
-  index_iter_.Seek(target); // 先找到目标 data block
+  
+  // 先找到目标 data block
+  index_iter_.Seek(target);
+  // 根据 index_iter_ 设置 data_iter_
   InitDataBlock();
-  if (data_iter_.iter() != nullptr) data_iter_.Seek(target); // 然后在目标 data block 找到目标数据项
-  SkipEmptyDataBlocksForward(); // data_iter_.iter() 为空则直接向前移动找到第一个不为空的 data block 的第一个数据项
+  // 然后在目标 data block 找到目标数据项
+  if (data_iter_.iter() != nullptr) data_iter_.Seek(target); 
+  // data_iter_.iter() 为空则直接向前移动找到第一个不为空的
+  // data block 的第一个数据项.
+  SkipEmptyDataBlocksForward(); 
 }
 
 // 将 index_iter_ 指向第一个非空 data block 数据项, 
@@ -131,7 +145,9 @@ void TwoLevelIterator::SeekToFirst() {
   index_iter_.SeekToFirst();
   InitDataBlock();
   if (data_iter_.iter() != nullptr) data_iter_.SeekToFirst();
-  SkipEmptyDataBlocksForward(); // data_iter_.iter() 为空则直接向前移动找到第一个不为空的 data block 的第一个数据项
+  // data_iter_.iter() 为空则直接向前移动找到第一个不为空的
+  // data block 的第一个数据项
+  SkipEmptyDataBlocksForward(); 
 }
 
 // 将 index_iter_ 指向最后一个非空 data block 数据项, 
@@ -140,14 +156,18 @@ void TwoLevelIterator::SeekToLast() {
   index_iter_.SeekToLast();
   InitDataBlock();
   if (data_iter_.iter() != nullptr) data_iter_.SeekToLast();
-  SkipEmptyDataBlocksBackward(); // data_iter_.iter() 为空则直接向后移动找到第一个不为空的 data block 的最后一个数据项
+  // data_iter_.iter() 为空则直接向后移动找到第一个不为空的
+  // data block 的最后一个数据项
+  SkipEmptyDataBlocksBackward(); 
 }
 
 // 使得 data_iter_ 指向下一个数据项
 void TwoLevelIterator::Next() {
   assert(Valid());
-  // data_iter_ 调用 Next 之前如果恰好指向 index_iter_ 所指 data block 最后一个数据项, 
-  // 那么调用 Next 后 data_iter_ 和 index_iter_ 就不保持一致了, 这个无碍. 
+  // data_iter_ 调用 Next 之前如果恰好指向
+  // index_iter_ 所指 data block 最后一个数据项, 
+  // 那么调用 Next 后 data_iter_ 和 index_iter_
+  // 就不保持一致了, 这个无碍. 
   data_iter_.Next();
   SkipEmptyDataBlocksForward();
 }
@@ -159,7 +179,8 @@ void TwoLevelIterator::Prev() {
   SkipEmptyDataBlocksBackward();
 }
 
-// 向前移动 index_iter_ 和 data_iter_ 跳过空的 data block 直到找到一个非空 data block, 
+// 向前移动 index_iter_ 和 data_iter_ 跳过空的
+// data block 直到找到一个非空 data block, 
 // 并将 data_iter_ 指向该非空 data block 的第一个数据项. 
 void TwoLevelIterator::SkipEmptyDataBlocksForward() {
   while (data_iter_.iter() == nullptr || !data_iter_.Valid()) {
@@ -174,8 +195,9 @@ void TwoLevelIterator::SkipEmptyDataBlocksForward() {
   }
 }
 
-// 向后移动 index_iter_ 和 data_iter_ 跳过空的 data block 直到找到一个非空 data block, 
-// 并将 data_iter_ 指向该非空 data block 的最后一个数据项. 
+// 向后移动 index_iter_ 和 data_iter_ 跳过空的 data block
+// 直到找到一个非空 data block, 并将 data_iter_ 指向该
+// 非空 data block 的最后一个数据项. 
 void TwoLevelIterator::SkipEmptyDataBlocksBackward() {
   while (data_iter_.iter() == nullptr || !data_iter_.Valid()) {
     // Move to next block
@@ -200,12 +222,13 @@ void TwoLevelIterator::InitDataBlock() {
   if (!index_iter_.Valid()) {
     SetDataIterator(nullptr);
   } else {
-    Slice handle = index_iter_.value(); // 获得 index_iter_ 当前所指 block 的 BlockHandle
+    // 获得 index_iter_ 当前所指 block 的 BlockHandle
+    Slice handle = index_iter_.value(); 
     if (data_iter_.iter() != nullptr && handle.compare(data_block_handle_) == 0) {
       // data_iter_ is already constructed with this iterator, so
       // no need to change anything
     } else {
-      // 将 BlockHandle 转换为一个指向对应 block 数据项的 Iterator
+      // 将 BlockHandle 转换为一个指向对应 data block 的 Iterator
       Iterator* iter = (*block_function_)(arg_, options_, handle);
       data_block_handle_.assign(handle.data(), handle.size());
       SetDataIterator(iter);

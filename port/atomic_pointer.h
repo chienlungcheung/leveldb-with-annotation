@@ -18,7 +18,7 @@
 /**
  * AtomicPointer 用来实现无锁指针. 
  *
- * 依赖于具体平台的 AtomicPointer 实现如下：
+ * 依赖于具体平台的 AtomicPointer 实现如下: 
  *
  * - 如果平台提供了方便的内存屏障, 我们就直接使用原始指针
  * - 如果 <atomic> 头文件存在(在新版的 gcc 中就有), 我们使用基于 <atomic> 的 AtomicPointer. 但
@@ -144,7 +144,7 @@ inline void MemoryBarrier() {
 /**
  * 此处实现使用的是平台相关的内存屏障. 
  * 注意, __asm__ __volatile__("" : : : "memory"); 除了作为内存屏障阻止编译器将屏障前后操作重排序, 
- * 它还有一个副作用, 就是将当前 cpu/core 上寄存器内容全部失效, 具体为：
+ * 它还有一个副作用, 就是将当前 cpu/core 上寄存器内容全部失效, 具体为: 
  * - 它会强制代码生成器将屏障插入位置之前在全部 cpu/core 上发生的全部 stores 操作从寄存器刷新到内存中(这可以确保其它 cpu/core 对内存的修改都生效); 
  * - 另外还有一个副作用就是令编译器假设内存已经发生改变, 当前 cpu/core 寄存器里的内容都失效了(这可以强制屏障后用到的变量必须去内存读取最新值). 
  * (It forces the code generator to emit all the stores for data that's currently in registers

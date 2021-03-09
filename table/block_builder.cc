@@ -108,7 +108,7 @@ void BlockBuilder::Add(const Slice& key, const Slice& value) {
 
   // Add "<shared><non_shared><value_size>" to buffer_
   //
-  // buffer 里面的每个记录的格式为：
+  // buffer 里面的每个记录的格式为: 
   // <varint32 类型的当前 key 与上个 key 公共前缀长度>
   // <varint32 类型的当前 key 长度减去公共前缀后的长度>
   // <varint32 类型的当前 value 的长度>

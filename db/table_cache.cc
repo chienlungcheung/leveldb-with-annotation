@@ -43,8 +43,10 @@ TableCache::~TableCache() {
   delete cache_;
 }
 
-// 从 cache_ 查找 file_number 对应的 table, 如果查到则将结果保存到 handle; 
-// 否则, 根据 file_number 构造一个新的 table, 并将其插入到 cache_, 并将结果保存到 handle. 
+// 从 cache_ 查找 file_number 对应的 table, 如果查到则将其
+// 在 cache_ 对应的指针保存到 handle; 
+// 否则, 根据 file_number 读取文件构造一个新的 table, 
+// 将其插入到 cache_, 并将结果保存到 handle. 
 Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
                              Cache::Handle** handle) {
   Status s;
@@ -77,7 +79,8 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
 
     if (!s.ok()) {
       assert(table == nullptr);
-      delete file; // table 打开失败, 删除之前创建的文件对象
+      // sstable 打开失败, 删除之前创建的文件对象
+      delete file; 
       // We do not cache error results so that if the error is transient,
       // or somebody repairs the file, we recover automatically.
     } else {

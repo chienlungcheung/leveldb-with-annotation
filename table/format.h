@@ -26,7 +26,7 @@
 //[Footer]        (fixed size; starts at file_size - sizeof(Footer))
 //<end_of_file>
 //
-//Footer 格式：
+//Footer 格式: 
 //metaindex_handle: char[p];     // 指向上面 [metaindex block] 的 BlockHandle
 //index_handle:     char[q];     // 指向上面 [index block] 的 BlockHandle
 //padding:          char[40-p-q];// 两个 BlockHandle 最大 40 字节, 不足则补零凑够 40 字节
@@ -40,7 +40,7 @@ struct ReadOptions;
 // BlockHandle is a pointer to the extent of a file that stores a data
 // block or a meta block.
 // 一个 BlockHandle 是一个指针, 它指向一个文件的范围, 该文件存储着 data block 或者 meta block. 
-// 它包括两部分：offset 和 size, 分别表示所指向的 block 在文件中的偏移量和大小. 
+// 它包括两部分: offset 和 size, 分别表示所指向的 block 在文件中的偏移量和大小. 
 class BlockHandle {
  public:
   BlockHandle();
@@ -63,7 +63,9 @@ class BlockHandle {
   enum { kMaxEncodedLength = 10 + 10 };
 
  private:
+  // 对应 block 在 sstable 文件中的偏移量
   uint64_t offset_;
+  // 对应 block 的大小
   uint64_t size_;
 };
 
@@ -124,7 +126,7 @@ static const uint64_t kTableMagicNumber = 0xdb4775248b80fb57ull;
 
 // 1-byte type + 32-bit crc
 //
-// 每个 block 的 trailer 由两部分构成：1 字节的 type(对应 block 的压缩类型), 和 32 位的 crc. 
+// 每个 block 的 trailer 由两部分构成: 1 字节的 type(对应 block 的压缩类型), 和 32 位的 crc. 
 // 共 5 字节. 
 static const size_t kBlockTrailerSize = 5;
 

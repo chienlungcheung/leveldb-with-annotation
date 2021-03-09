@@ -99,9 +99,9 @@ class LEVELDB_EXPORT Cache {
   /**
    * 先通过 Lookup 查询映射对应的 handle, 然后调用该函数来释放该映射. 
    *
-   * 要求：handle 之前未被释放过
+   * 要求: handle 之前未被释放过
    *
-   * 要求：handle 必须是通过在 *this 上调用某个方法返回的
+   * 要求: handle 必须是通过在 *this 上调用某个方法返回的
    * @param handle 通过 Lookup 查询到的映射对应的 handle
    */
   virtual void Release(Handle* handle) = 0;
@@ -113,9 +113,9 @@ class LEVELDB_EXPORT Cache {
   /**
    * 返回通过成功调用 Lookup 后返回的 handle 中封装的 value. 
    *
-   * 要求：handle 之前未被释放过
+   * 要求: handle 之前未被释放过
    *
-   * 要求：handle 必须是通过在 *this 上调用某个方法返回的
+   * 要求: handle 必须是通过在 *this 上调用某个方法返回的
    * @param handle
    * @return
    */

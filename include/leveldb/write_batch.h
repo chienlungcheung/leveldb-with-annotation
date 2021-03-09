@@ -21,7 +21,7 @@
 /**
  * WriteBatch 包含了一组要原子化地应用到某个数据库上的更新操作. 
  *
- * 这些更新操作会被按照他们被添加到 WriteBatch 的顺序执行. 比如下面操作这个批量操作的结果是 v3：
+ * 这些更新操作会被按照他们被添加到 WriteBatch 的顺序执行. 比如下面操作这个批量操作的结果是 v3: 
  *
  *     batch.Put("key", "v1");
  *     batch.Delete("key");
@@ -116,10 +116,10 @@ class LEVELDB_EXPORT WriteBatch {
   // 该类为 WriteBatch 的友元类, 而且无状态, 只提供静态方法用于操作 WriteBatch 里面的数据
   friend class WriteBatchInternal; 
 
-  // WriteBatch::rep_ 构成：
+  // WriteBatch::rep_ 构成: 
   //   std::string 类型, 由 8 字节序列号 + 4 字节计数值 + 计数值指定个数的 records 构成
   //
-  // record 构成：
+  // record 构成: 
   //   kTypeValue(1 个字节) + key(varstring 类型, 可变长度字符串) + value(varstring 类型, 可变长度字符串)
   //      这个 record 表示插入了一个新的键值对. 
   //
@@ -128,7 +128,7 @@ class LEVELDB_EXPORT WriteBatch {
   //   kTypeDeletion(1 个字节) + key(varstring 类型, 可变长度字符串), 
   //      这个 record 表示对应的 key 被删除了(leveldb 的删除也是一个插入操作, 只不过没有 value, 即墓碑消息)
   //
-  // varstring 构成：
+  // varstring 构成: 
   //   len(varint32(1~5字节) 或 varint64(1~9字节)类型, 而且每个字节只有低 7 位才是有效数据部分, 最高位为标识位, 标识是否有后续字节)
   //   + data(长度为 len)
   std::string rep_;  // See comment in write_batch.cc for the format of rep_

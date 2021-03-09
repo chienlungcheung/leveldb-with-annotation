@@ -42,7 +42,7 @@ class WritableFile;
 //
 // 返回满足条件 files[i]->largest >= key 的最小索引 i; 如果不存在则返回 files 列表长度. 
 // 通过二分法在 files 里查找. 
-// 要求：files 必须包含一组有序的且无重叠的文件(除了 level-0, 其它 levels 的文件列表均满足该条件). 
+// 要求: files 必须包含一组有序的且无重叠的文件(除了 level-0, 其它 levels 的文件列表均满足该条件). 
 int FindFile(const InternalKeyComparator& icmp,
              const std::vector<FileMetaData*>& files,
              const Slice& key);
@@ -56,7 +56,7 @@ int FindFile(const InternalKeyComparator& icmp,
 // 当且仅当 files 中某个文件与参数 [*smallest,*largest] 指定的 user key 区间重叠返回 true. 
 // smallest==nullptr 表示小于 DB 中全部 keys 的 key. 
 // largest==nullptr 表示大于 DB 中全部 keys 的 key. 
-// 要求：如果 disjoint_sorted_files 为 true, files[] 包含的区间不相交且有序. 
+// 要求: 如果 disjoint_sorted_files 为 true, files[] 包含的区间不相交且有序. 
 bool SomeFileOverlapsRange(const InternalKeyComparator& icmp,
                            bool disjoint_sorted_files,
                            const std::vector<FileMetaData*>& files,
@@ -70,7 +70,7 @@ class Version {
   // REQUIRES: This version has been saved (see VersionSet::SaveTo)
   //
   // 将一系列迭代器追加到 iters 向量里, 这些迭代器在被合并后会生成该版本的内容. 
-  // 前提：该版本事先已经通过 VersionSet::SaveTo 方法被保存过了. 
+  // 前提: 该版本事先已经通过 VersionSet::SaveTo 方法被保存过了. 
   void AddIterators(const ReadOptions&, std::vector<Iterator*>* iters);
 
   // Lookup the value for key.  If found, store it in *val and
@@ -84,7 +84,7 @@ class Version {
   // 从 level-0 开始一层一层查找 key 对应的 value. 
   // 当查询一个 key 时, 如果找到了对应的 value, 则将 value 保存到 *val 指向的地址并且返回 OK; 
   // 否则, 返回一个  non-OK. 
-  // 前提： 调用该方法之前必须未持有锁. todo 这个前提不知道是不是写错了. 
+  // 前提:  调用该方法之前必须未持有锁. todo 这个前提不知道是不是写错了. 
   Status Get(const ReadOptions&, const LookupKey& key, std::string* val,
              GetStats* stats);
 
@@ -92,7 +92,7 @@ class Version {
   // compaction may need to be triggered, false otherwise.
   // REQUIRES: lock is held
   // 将 stats 增加到当前状态中. 如果需要触发一个压缩, 则返回 true; 否则返回 false. 
-  // 前提：调用该方法前必须已经持有锁. 
+  // 前提: 调用该方法前必须已经持有锁. 
   bool UpdateStats(const GetStats& stats);
 
   // Record a sample of bytes read at the specified internal key.
@@ -104,7 +104,7 @@ class Version {
   // 该方法就是从 level-0 开始检查有多少个文件的范围与 key 重叠, 
   // 如果有多于两个就会设置触发压实的标记, 并且在检查过程中会记录第一个与 key 重叠的文件及其 level. 
   // 如果需要触发一次新的压实, 则返回 true, 否则返回 false. 
-  // 前提：调用该方法前必须已经持有锁. 
+  // 前提: 调用该方法前必须已经持有锁. 
   bool RecordReadSample(Slice key);
 
   // Reference count management (so Versions do not disappear out from
@@ -161,7 +161,7 @@ class Version {
   // 从 level-0 开始, level-by-level 的针对与 user_key 重叠的每个文件
   // 按从最新到最老的顺序依次调用 func(arg, level, f). 
   // 针对 func 的调用失败一次即停止后续调用. 
-  // 前提：internal_key 的 user key 部分 == user_key
+  // 前提: internal_key 的 user key 部分 == user_key
   void ForEachOverlapping(Slice user_key, Slice internal_key,
                           void* arg,
                           bool (*func)(void*, int, FileMetaData*));
@@ -221,8 +221,8 @@ class VersionSet {
   // REQUIRES: no other thread concurrently calls LogAndApply()
   //
   // 将 *edit 内容施用到当前 version 来构成一个新的描述符, 这个描述符会被持久化保存同时会被作为新的当前 version 进行安装. 
-  // 前提：*mu 在进入方法之前就被持有了. 
-  // 前提：没有其它线程并发调用该方法. 
+  // 前提: *mu 在进入方法之前就被持有了. 
+  // 前提: 没有其它线程并发调用该方法. 
   Status LogAndApply(VersionEdit* edit, port::Mutex* mu)
       EXCLUSIVE_LOCKS_REQUIRED(mu);
 

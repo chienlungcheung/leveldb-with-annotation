@@ -115,7 +115,7 @@ Install the project...
 
 该工程开箱即支持 CMake. 
 
-快速开始：
+快速开始: 
 ```bash
 mkdir -p build && cd build
 cmake -DCMAKE_BUILD_TYPE=Release .. && cmake --build .
@@ -274,7 +274,7 @@ LevelDB 会在后台压实底层的数据来改善读性能. 上面列出的结�
     readreverse :  0.663 micros/op;  166.9 MB/s
     
 读操作消耗高的地方有一些来自重复解压从磁盘读取的数据块. 如果我们能提供足够的缓存给 leveldb 来将
-解压后的数据保存在内存中, 读性能会进一步改善：
+解压后的数据保存在内存中, 读性能会进一步改善: 
    
     readrandom  : 9.775 micros/op;  (approximately 100,000 reads per second before compaction)
     readrandom  : 5.215 micros/op;  (approximately 190,000 reads per second after compaction) 
@@ -294,7 +294,7 @@ LevelDB 对外的接口都包含在 include/*.h 中. 除了该目录下的文件
 
 Guide to header files:
 
-头文件介绍：
+头文件介绍: 
 
 * **include/db.h**: Main interface to the DB: Start here 主要的接口在这, 使用 leveldb 从这里开始. 
 

@@ -46,7 +46,7 @@ class WritableFile;
 //
 // 返回满足条件 files[i]->largest >= key 的最小索引 i; 如果不存在则返回 files 列表长度. 
 // 通过二分法在 files 里查找. 
-// 要求：files 必须包含一组有序的且无重叠的文件(除了 level-0, 其它 levels 的文件列表均满足该条件). 
+// 要求: files 必须包含一组有序的且无重叠的文件(除了 level-0, 其它 levels 的文件列表均满足该条件). 
 int FindFile(const InternalKeyComparator& icmp,
              const std::vector<FileMetaData*>& files,
              const Slice& key);
@@ -61,7 +61,7 @@ int FindFile(const InternalKeyComparator& icmp,
 // 当且仅当 files 中某个文件与参数 [*smallest,*largest] 指定的 user key 区间重叠返回 true. 
 // smallest==nullptr 表示小于 DB 中全部 keys 的 key. 
 // largest==nullptr 表示大于 DB 中全部 keys 的 key. 
-// 要求：如果 disjoint_sorted_files 为 true, files[] 包含的区间不相交且有序. 
+// 要求: 如果 disjoint_sorted_files 为 true, files[] 包含的区间不相交且有序. 
 bool SomeFileOverlapsRange(const InternalKeyComparator& icmp,
                            bool disjoint_sorted_files,
                            const std::vector<FileMetaData*>& files,
@@ -79,7 +79,7 @@ class Version {
   // REQUIRES: This version has been saved (see VersionSet::SaveTo)
   //
   // 将一系列迭代器追加到 iters 向量里, 这些迭代器在被合并后会生成该版本的内容. 
-  // 前提：当前 Version 对象事先已经通过 VersionSet::SaveTo 方法被保存过了. 
+  // 前提: 当前 Version 对象事先已经通过 VersionSet::SaveTo 方法被保存过了. 
   void AddIterators(const ReadOptions&, std::vector<Iterator*>* iters);
 
   // Lookup the value for key.  If found, store it in *val and
@@ -99,7 +99,7 @@ class Version {
   // 
   // 当查询一个 key 时, 如果找到了对应的 value, 则将 value 保存到 *val 指向的地址并且返回 OK; 
   // 否则, 返回一个  non-OK. 
-  // 前提： 调用该方法之前必须未持有锁(调用前 db 会释放持有的锁, 具体见 DBImpl::Get). 
+  // 前提:  调用该方法之前必须未持有锁(调用前 db 会释放持有的锁, 具体见 DBImpl::Get). 
   Status Get(const ReadOptions&, const LookupKey& key, std::string* val,
              GetStats* stats);
 
@@ -110,7 +110,7 @@ class Version {
   // 如果上次调用 Get 查询感知到疑似需要进行压实, 则此处进一步检查确定是否触发压实.
   // 检查条件是 stats 的 allowed_seeks 是否降为 0.
   // 如果需要触发一个压实, 则返回 true; 否则返回 false. 
-  // 前提：调用该方法前必须已经持有锁. 
+  // 前提: 调用该方法前必须已经持有锁. 
   bool UpdateStats(const GetStats& stats);
 
   // Record a sample of bytes read at the specified internal key.
@@ -122,7 +122,7 @@ class Version {
   // 该方法就是从 level-0 开始检查有多少个文件的范围与 key 重叠, 
   // 如果有多于两个就会设置触发压实的标记, 并且在检查过程中会记录第一个与 key 重叠的文件及其 level. 
   // 如果需要触发一次新的压实, 则返回 true, 否则返回 false. 
-  // 前提：调用该方法前必须已经持有锁. 
+  // 前提: 调用该方法前必须已经持有锁. 
   bool RecordReadSample(Slice key);
 
   // Reference count management (so Versions do not disappear out from
@@ -190,19 +190,19 @@ class Version {
   // 从 level-0 开始, level-by-level 的针对与 user_key 重叠的每个文件
   // 按从最新到最老的顺序依次调用 func(arg, level, f). 
   // 针对 func 的调用失败一次即停止后续调用. 
-  // 前提：internal_key 的 user key 部分 == user_key
+  // 前提: internal_key 的 user key 部分 == user_key
   void ForEachOverlapping(Slice user_key, Slice internal_key,
                           void* arg,
                           bool (*func)(void*, int, FileMetaData*));
   // 该 version 所属的 VersionSet
-  VersionSet* vset_;            // VersionSet to which this Version belongs
+  VersionSet* vset_;           
   // 接下来两个指针使得 Version 可以构成双向循环链表
-  // 链表中下个 version 指针
-  Version* next_;               // Next version in linked list
-  // 链表中前个 version 指针
-  Version* prev_;               // Previous version in linked list
+  // 指向链表中下个 version 的指针
+  Version* next_;              
+  // 指向链表中前个 version 的指针
+  Version* prev_;              
   // 该 version 的活跃引用计数
-  int refs_;                    // Number of live refs to this version
+  int refs_;                    
 
   // List of files per level
   // 核心成员, 该成员保存了当前最新的 level 架构信息, 即 db 每个 level 的文件元数据链表
@@ -249,17 +249,13 @@ class VersionSet {
              const InternalKeyComparator*);
   ~VersionSet();
 
-  // Apply *edit to the current version to form a new descriptor that
-  // is both saved to persistent state and installed as the new
-  // current version.  Will release *mu while actually writing to the file.
-  // REQUIRES: *mu is held on entry.
-  // REQUIRES: no other thread concurrently calls LogAndApply()
+  // 1, 将 *edit 内容(可看作当前针对 level 架构的增量更新)和当前 version 内容合并构成一个新的 version;
+  // 2, 然后将这个新 version 内容序列化为一条日志持久化到新建的 manifest 文件;
+  // 3, 同时将该 manifest 文件名写入 current 文件;
+  // 4, 最后把新的 version 替换当前 version.
   //
-  // 将 *edit 内容和当前 version 内容合并构成一个新的 version, 然后将这个
-  // 新 version 内容序列化为一条日志写到新建的 manifest 文件, 同时将该 manifest
-  // 文件名写入 current 文件. 最后把新的 version 替换当前 version.
-  // 前提：*mu 在进入方法之前就被持有了. 
-  // 前提：没有其它线程并发调用该方法. 
+  // 前提: *mu 在进入方法之前就被持有了. 
+  // 前提: 没有其它线程并发调用该方法. 
   Status LogAndApply(VersionEdit* edit, port::Mutex* mu)
       EXCLUSIVE_LOCKS_REQUIRED(mu);
 
@@ -445,12 +441,14 @@ class VersionSet {
   // 当前 MANIFEST 文件
   WritableFile* descriptor_file_;
   // MANIFEST 文件格式同 log 文件, 所以写入方法就复用了. 其每条日志就是一个序列化后的 VersionEdit.
-  log::Writer* descriptor_log_;
+  log::Writer* descriptor_log_; 
+  // Head of circular doubly-linked list of versions.
   // 属于该 VersionSet 的 Version 都会被维护到一个双向循环链表中, 
   // 而且新加入的 Version 都会插入到 dummy_versions_ 前面. 
-  Version dummy_versions_;  // Head of circular doubly-linked list of versions.
-  // 指向当前 Version
-  Version* current_;        // == dummy_versions_.prev_
+  // dummy_versions_.next_ 默认指向自己(具体见 Version 构造函数)后续指向最老的 version.
+  Version dummy_versions_; 
+  // 指向当前 Version == dummy_versions_.prev_
+  Version* current_;       
 
   // Per-level key at which the next compaction at that level should start.
   // Either an empty string, or a valid InternalKey.
@@ -566,7 +564,7 @@ class Compaction {
   // all L >= level_ + 2).
   //
   // 用于实现 IsBaseLevelForKey 方法. 
-  // level_ptrs_ 持有 input_version_->levels_ 的索引：
+  // level_ptrs_ 持有 input_version_->levels_ 的索引: 
   // 我们被定位到其中一个文件范围内, 对于没一个比当前中那个在进行压实的 level. 
   size_t level_ptrs_[config::kNumLevels];
 };

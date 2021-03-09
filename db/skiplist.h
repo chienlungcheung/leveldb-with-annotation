@@ -37,11 +37,11 @@ namespace leveldb {
 
 class Arena;
 
-// 线程安全相关说明：
+// 线程安全相关说明: 
 // - 写操作需要外部同步设施, 比如 mutex. 
 // - 读操作需要一个保证, 即读操作执行期间, SkipList 不能被销毁; 只要保证这一点, 读操作不需要额外的同步措施. 
 //
-// 不变式：
+// 不变式: 
 // - (1)已分配的 nodes 直到 SkipList 被销毁才能被删除. 这很容易保证, 因为我们不会删除任何 skip list nodes. 
 // - (2)一个 Node 一旦被链接到 SkipList 上, 那这个 Node 的内容, 除了 next/pre 指针以外, 都是 immutable 的. 
 //
@@ -66,7 +66,7 @@ class SkipList {
   // REQUIRES: nothing that compares equal to key is currently in the list.
   //
   // 将 key 插入到 skiplist 实例中. 
-  // 要求： skiplist 中当前不存在等于 key 的节点(我们的数据结构不允许出现同一个 key 的数据项). 
+  // 要求:  skiplist 中当前不存在等于 key 的节点(我们的数据结构不允许出现同一个 key 的数据项). 
   void Insert(const Key& key);
 
   // Returns true iff an entry that compares equal to key is in the list.
@@ -94,21 +94,21 @@ class SkipList {
     // REQUIRES: Valid()
     //
     // 返回迭代器当前位置的 key. 
-    // 要求：当前迭代器有效. 
+    // 要求: 当前迭代器有效. 
     const Key& key() const;
 
     // Advances to the next position.
     // REQUIRES: Valid()
     //
     // 将迭代器移动到下个位置. 
-    // 要求：当前迭代器有效. 
+    // 要求: 当前迭代器有效. 
     void Next();
 
     // Advances to the previous position.
     // REQUIRES: Valid()
     //
     // 将迭代器倒退一个位置. 
-    // 要求：当前迭代器有效. 
+    // 要求: 当前迭代器有效. 
     void Prev();
 
     // Advance to the first entry with a key >= target

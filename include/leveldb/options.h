@@ -55,7 +55,7 @@ struct LEVELDB_EXPORT Options {
   /**
    * Comparator 用于定义跳跃表里面 key 的顺序, 默认采用的是针对 key 逐个字节按字典序比较. 
    *
-   * 注意, 使用者所提供的 comparator 要做到两个确保：
+   * 注意, 使用者所提供的 comparator 要做到两个确保: 
    *
    * 针对同一个 DB, 使用者提供的 comparator 的名字每一次都要相同; 
    *
@@ -88,7 +88,7 @@ struct LEVELDB_EXPORT Options {
   /**
    * 如果值为 true, 底层实现将会采取比较激进的方式针对数据进行检查, 一旦检测到任何错误就会停止处理. 
    *
-   * 这个配置可能会导致无法预料的后果：
+   * 这个配置可能会导致无法预料的后果: 
    *
    * 比如, DB 中某一项出问题就可能导致大量的数据项变为不可读或者导致整个 DB 变为不可打开的. 
    *
@@ -165,9 +165,12 @@ struct LEVELDB_EXPORT Options {
   // If null, leveldb will automatically create and use an 8MB internal cache.
   // Default: nullptr
   /**
-   * 用户数据被存到一组 blocks 中, block 就是从磁盘读数据时的最小单位. 下面这个值可以控制 blocks 相关的缓存大小. 
+   * 用户数据被存到一组 blocks 中, block 就是从磁盘读数据时的最小单位. 
+   * 
+   * 下面这个值可以控制 blocks 相关的缓存大小. 
    *
-   * 如果该值为非空, 则针对 blocks 使用用户指定的 cache; 如果为空, leveldb 将会自动创建一个大小为 8MB 的缓存. 
+   * 如果该值为非空, 则针对 blocks 使用用户指定的 cache; 
+   * 如果为空, leveldb 将会自动创建一个大小为 8MB 的缓存. 
    *
    * 默认值为 nullptr
    */
@@ -195,7 +198,7 @@ struct LEVELDB_EXPORT Options {
   // Default: 16
   /**
    * 两个 restart points 之间 keys 的个数, restart point 用于差分编码(差分編碼的簡單例子
-   * 是儲存序列式資料之間的差異(而不是儲存資料本身)：不存「2, 4, 6, 9, 7」, 而是存「2, 2, 2, 3, -2」. 
+   * 是儲存序列式資料之間的差異(而不是儲存資料本身): 不存「2, 4, 6, 9, 7」, 而是存「2, 2, 2, 3, -2」. 
    * 單獨使用用處不大, 但是在序列式數值常出現時可以幫助壓縮資料.  ). 
    *
    * 这个参数可以动态进行调整. 大部分情况下不需要修改这个值. 
@@ -253,7 +256,7 @@ struct LEVELDB_EXPORT Options {
   //
   // Default: currently false, but may become true later.
   /**
-   * 试验特性：如果该值为真, 打开数据库时会把数据追加到已存在的 MANIFEST 和 log 文件. 这个特效可以加速 open 操作. 
+   * 试验特性: 如果该值为真, 打开数据库时会把数据追加到已存在的 MANIFEST 和 log 文件. 这个特效可以加速 open 操作. 
    *
    * 默认值为 false, 后续版本可能会变为 true. 
    */

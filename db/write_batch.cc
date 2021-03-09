@@ -69,7 +69,7 @@ Status WriteBatch::Iterate(Handler* handler) const {
   Slice key, value;
   int found = 0;
   // 迭代 batch, 根据每条 record 的 ValueType(即操作类型)进行相应的处理; 
-  // record 构成为： ValueType + key + value(如果为删除类型, 则 value 为空)
+  // record 构成为:  ValueType + key + value(如果为删除类型, 则 value 为空)
   // 当前仅支持两种类型的操作, 即 put 和 delete. 
   // 真正执行处理的是 Handler. 
   while (!input.empty()) {

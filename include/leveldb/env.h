@@ -205,7 +205,7 @@ class LEVELDB_EXPORT Env {
   // REQUIRES: lock has not already been unlocked.
   //
   // 释放通过前一个方法成功调用后获得的锁. 
-  // 前提：必须已经通过 LockFile 方法获得了 lock; lock 还未被释放过. 
+  // 前提: 必须已经通过 LockFile 方法获得了 lock; lock 还未被释放过. 
   virtual Status UnlockFile(FileLock* lock) = 0;
 
   // Arrange to run "(*function)(arg)" once in a background thread.
@@ -281,7 +281,7 @@ class LEVELDB_EXPORT SequentialFile {
   // 从文件最多读取 n 字节, 读取内容存储到 scratch 指向空间, 然后把 scratch 封装在 result 里面, 
   // 所以这两者生命期要协调好. 如果出错, 返回 non-OK. 
   //
-  // 前提：调用该方法需要使用外部同步设施. 
+  // 前提: 调用该方法需要使用外部同步设施. 
   virtual Status Read(size_t n, Slice* result, char* scratch) = 0;
 
   // Skip "n" bytes from the file. This is guaranteed to be no
@@ -296,7 +296,7 @@ class LEVELDB_EXPORT SequentialFile {
   //
   // 如果前进 n 超过了文件末尾, 那就会直接停在文件尾部, 同时返回 OK. 
   //
-  // 前提：调用该方法需要使用外部同步设施. 
+  // 前提: 调用该方法需要使用外部同步设施. 
   virtual Status Skip(uint64_t n) = 0;
 };
 
@@ -386,7 +386,7 @@ class LEVELDB_EXPORT FileLock {
 // 关于这里 __attribute__ 的使用, 请见 http://blog.51cto.com/afreez/7351
 // __attribute__ format
 // 该__attribute__属性可以给被声明的函数加上类似printf或者scanf的特征, 它可以使编译器检查函数声明和函数实际调用参数之间的格式化字符串是否匹配. 该功能十分有用, 尤其是处理一些很难发现的bug. 
-// format的语法格式为：
+// format的语法格式为: 
 // format (archetype, string-index, first-to-check)
 //    format属性告诉编译器, 按照printf, scanf, strftime或strfmon的参数表格式规则对该函数的参数进行检查. "archetype" 指定是哪种风格; "string-index" 指定传入函数的第几个参数是格式化字符串; "first-to-check" 指定从函数的第几个参数开始按上述规则进行检查
 void Log(Logger* info_log, const char* format, ...)

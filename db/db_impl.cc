@@ -186,6 +186,7 @@ Status DBImpl::NewDB() {
   VersionEdit new_db;
   new_db.SetComparatorName(user_comparator()->Name());
   new_db.SetLogNumber(0);
+  // 下面马上新建一个占用了 1, 所以下一个是 2
   new_db.SetNextFile(2);
   new_db.SetLastSequence(0);
 
@@ -197,7 +198,7 @@ Status DBImpl::NewDB() {
     return s;
   }
   {
-    // 将当前 version_edit 内容序列化为一条日志记录到 MANIFEST 文件
+    // 将上面新创建的 version_edit 内容序列化为一条日志记录到 MANIFEST 文件
     log::Writer log(file);
     std::string record;
     new_db.EncodeTo(&record);
@@ -226,6 +227,7 @@ void DBImpl::MaybeIgnoreError(Status* s) const {
   }
 }
 
+// 删除过期文件
 void DBImpl::DeleteObsoleteFiles() {
   mutex_.AssertHeld();
 
@@ -236,7 +238,9 @@ void DBImpl::DeleteObsoleteFiles() {
   }
 
   // Make a set of all of the live files
+  // 将当前全部 sorted table 文件添加到 live 集合中
   std::set<uint64_t> live = pending_outputs_;
+  // 将全部存活 version 中维护的文件添加到 live 集合中
   versions_->AddLiveFiles(&live);
 
   std::vector<std::string> filenames;
@@ -283,7 +287,7 @@ void DBImpl::DeleteObsoleteFiles() {
     }
   }
 }
-// 该方法用于刚打开数据库时从磁盘读取数据在内存建立 level 架构.
+// 该方法用于刚打开数据库时从磁盘读取数据在内存建立 level 架构. save_manifest 用于指示是否续用老的 MANIFEST 文件.
 // - 读取 CURRENT 文件(不存在则新建)找到最新的 MANIFEST 文件(不存在则新建)的名称
 // - 读取该 MANIFEST 文件内容
 // - 清理过期的文件
@@ -489,7 +493,7 @@ Status DBImpl::RecoverLogFile(uint64_t log_number, bool last_log,
       *save_manifest = true;
       status = WriteLevel0Table(mem, edit, nullptr);
       mem->Unref();
-      // 如果写入磁盘了, 那么对应的 memtable 就和磁盘数据重复了, 置空
+      // 如果写入磁盘了, 那么对应的 memtable 就和磁盘数据重复了, 置空, 下次循环会新建
       mem = nullptr;
       if (!status.ok()) {
         // Reflect errors immediately so that conditions like full
@@ -655,7 +659,7 @@ void DBImpl::CompactMemTable() {
  * 压实过程中, 已经被删除或者被覆盖过的数据会被丢弃, 同时会将数据重新安放以减少后续数据访问操作的成本. 
  * 这个操作是为那些理解底层实现的用户准备的. 
  *
- * 如果 begin==nullptr, 则从第一个键开始; 如果 end==nullptr 则到最后一个键为止. 所以, 如果像下面这样做则意味着压紧整个数据库：
+ * 如果 begin==nullptr, 则从第一个键开始; 如果 end==nullptr 则到最后一个键为止. 所以, 如果像下面这样做则意味着压紧整个数据库: 
  *
  * db->CompactRange(nullptr, nullptr);
  * @param begin 起始键
@@ -1517,7 +1521,7 @@ WriteBatch* DBImpl::BuildBatchGroup(Writer** last_writer) {
 // 当外部调用 db 写数据时, 该方法被调用负责根据实际情况创建新的 log 文件, 
 // 同时将当前 memtable 赋值给 imm_ 等待被写盘.
 // 
-// 调用该方法前提：
+// 调用该方法前提: 
 // - mutex_ 被当前线程持有
 // - 当前线程当前在 writer 队列的队首
 Status DBImpl::MakeRoomForWrite(bool force) {
@@ -1596,7 +1600,7 @@ Status DBImpl::MakeRoomForWrite(bool force) {
  * DB 实现可以通过该方法导出自身状态相关的信息. 如果提供的属性可以被 DB 实现理解, 那么第二个参数将会
  * 存储该属性对应的当前值同时该方法返回 true, 其它情况该方法返回 false. 
  *
- * 合法的属性名称包括：
+ * 合法的属性名称包括: 
  *
  * "leveldb.num-files-at-level<N>" - 返回 level <N> 的文件个数, 其中 <N> 是一个 ASCII 格式的数字. 
  *
@@ -1736,17 +1740,24 @@ Status DB::Open(const Options& options, const std::string& dbname,
 
   DBImpl* impl = new DBImpl(options, dbname);
   impl->mutex_.Lock();
+  // 新建一个 edit
   VersionEdit edit;
-  // Recover handles create_if_missing, error_if_exists
+  // 下面的 Recover 自动处理这两种错误: create_if_missing, error_if_exists.
+  // save_manifest 用于标识是否需要在 Recover 后写 manifest 文件.
   bool save_manifest = false;
-  // 读取 current 文件, manifest 文件, sorted table 文件和 log 文件恢复数据库
+  // 读取 current 文件, manifest 文件, sorted table 文件和 log 文件恢复数据库.
+  // 如果要打开的数据库不存在, Recover 负责进行创建.
   Status s = impl->Recover(&edit, &save_manifest);
+  // 如果打开成功且当前 memtable 为空则创建之及其对应的 log 文件
   if (s.ok() && impl->mem_ == nullptr) {
     // Create new log and a corresponding memtable.
+    // 创建 log 文件及其对应的 memtable. 
+    // log 文件名就是一个数字, 由 VersionSet 负责维护.
     uint64_t new_log_number = impl->versions_->NewFileNumber();
     WritableFile* lfile;
     s = options.env->NewWritableFile(LogFileName(dbname, new_log_number),
                                      &lfile);
+    // log 文件创建成功, 则将其 log 名字记录到 edit, 并创建对应的 memtable
     if (s.ok()) {
       edit.SetLogNumber(new_log_number);
       impl->logfile_ = lfile;
@@ -1756,12 +1767,13 @@ Status DB::Open(const Options& options, const std::string& dbname,
       impl->mem_->Ref();
     }
   }
-  // 如果前面有 level 文件变动, 则需要写日志到 manifest 文件
+  // 如果数据库打开成功, 且需要记录变更到 manifest 文件(上面 Recover 导致), 则将 edit 序列化到 manifest
   if (s.ok() && save_manifest) {
     edit.SetPrevLogNumber(0);  // No older logs needed after recovery.
     edit.SetLogNumber(impl->logfile_number_);
     s = impl->versions_->LogAndApply(&edit, &impl->mutex_);
   }
+  // 数据库打开成功, 启动过期文件删除和周期性压实任务
   if (s.ok()) {
     impl->DeleteObsoleteFiles();
     impl->MaybeScheduleCompaction();

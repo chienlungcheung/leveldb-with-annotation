@@ -21,7 +21,7 @@ struct Options;
 // 在 block 结尾处保存着一个全部 restart points 对应的偏移量数组, 这个数组可以被用于进行二分查找以快速定位 block 中某个具体的 key. 
 // 与 keys 不同, values 仍然保存的是未压缩的原值; 而且每个 value 紧跟在其对应的 key 之后. 
 //
-// block 中每个数据项的格式如下：
+// block 中每个数据项的格式如下: 
 //     shared_bytes: varint32(与前一个 key 共享的前缀的长度, varint32 类型)
 //     unshared_bytes: varint32(当前 key 除去共享前缀后的长度, varint32 类型)
 //     value_length: varint32(当前 key 对应的 value 的长度, varint32 类型)
@@ -29,7 +29,7 @@ struct Options;
 //     value: char[value_length](当前 key 对应的 value 的数据)
 // shared_bytes == 0 for restart points. 注意, 如果该数据项位于 restart 处, 则 shared_bytes 为 0.
 //
-// block 结尾处有个 trailer, 格式如下：
+// block 结尾处有个 trailer, 格式如下: 
 //     restarts: uint32[num_restarts](保存 restart points 在 block 内偏移量的数组)
 //     num_restarts: uint32(restart points 偏移量数组大小)
 // restarts[i] 保存的是第 i 个 restart point 在 block 内的偏移量. 
@@ -46,7 +46,7 @@ class BlockBuilder {
   // REQUIRES: key is larger than any previously added key
   //
   // 追加一个数据项到 buffer. 
-  // 前提：自从上次调用 Reset() 还未调用过 Finish(); 参数 key 要大于任何之前已经添加过的数据项的 key. 
+  // 前提: 自从上次调用 Reset() 还未调用过 Finish(); 参数 key 要大于任何之前已经添加过的数据项的 key. 
   void Add(const Slice& key, const Slice& value);
 
   // Finish building the block and return a slice that refers to the

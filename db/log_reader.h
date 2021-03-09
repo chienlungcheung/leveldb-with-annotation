@@ -117,7 +117,7 @@ class Reader {
     // * The record is below constructor's initial_offset (No drop is reported)
     //
     // 当遇到无效的物理 record 时返回该值. 
-    // 当前有三个场景会导致该情况的发生：
+    // 当前有三个场景会导致该情况的发生: 
     // * 该 record 的 crc 无效(ReadPhysicalRecord 方法会报告数据丢弃)
     // * 该 record 长度为 0(报告无数据丢弃)
     // * 该 record 起始地址小于构造方法中传入的 initial_offset (报告无数据丢弃)

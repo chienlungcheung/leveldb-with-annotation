@@ -33,8 +33,11 @@ struct FileMetaData {
   FileMetaData() : refs(0), allowed_seeks(1 << 30), file_size(0) { }
 };
 
-// 该类是 MANIFEST 文件的一行日志的反序列化形式.
+// 该类是 MANIFEST 文件的一行日志的反序列化形式, 
 // 负责记录 level 架构中新增/删除的文件及其所属的 level.
+//
+// 可将它看作当前 level 架构(由 Version 表示) 的增量变化,
+// 将它和当前 Version 内容合并就可以生成最新的 level 架构(一个新的 Version). 
 class VersionEdit {
  public:
   VersionEdit() { Clear(); }
@@ -77,10 +80,12 @@ class VersionEdit {
   // REQUIRES: This version has not been saved (see VersionSet::SaveTo)
   // REQUIRES: "smallest" and "largest" are smallest and largest keys in file
   //
+  // 向当前的 level 架构新增一个文件.
+  // 
   // 当新增一个文件时, 将其元信息记录到 version_edit 的 new_files_ 队列中.
   // 以指定的文件号码将文件保存到指定的 level. 
-  // 前提：该 version 没有被保存过(见 VersionSet::SaveTo)
-  // 前提："smallest" 和 "largest" 分别是文件中最小的 key 和最大的 key
+  // 前提: 该 version 没有被保存过(见 VersionSet::SaveTo)
+  // 前提: "smallest" 和 "largest" 分别是文件中最小的 key 和最大的 key
   void AddFile(int level, uint64_t file,
                uint64_t file_size,
                const InternalKey& smallest,
@@ -117,7 +122,9 @@ class VersionEdit {
   std::string comparator_; // comparator name
   uint64_t log_number_;
   uint64_t prev_log_number_;
+  // 下个 MANIFEST 文件编号, 从 1 开始
   uint64_t next_file_number_;
+  // 下个写操作的序列号
   SequenceNumber last_sequence_;
   bool has_comparator_;
   bool has_log_number_;
@@ -125,11 +132,11 @@ class VersionEdit {
   bool has_next_file_number_;
   bool has_last_sequence_;
 
-// 记录每个 level 下次压实的起始 key
+  // 记录每个 level 下次压实的起始 key
   std::vector< std::pair<int, InternalKey> > compact_pointers_;
-  // 待删除文件列表
+  // 保存从当前 level 架构要删除的一个文件
   DeletedFileSet deleted_files_;
-  // 新增文件列表(注意第二个参数不是指针类型)
+  // 保存要新增到当前 level 架构中的文件(注意第二个参数不是指针类型)
   std::vector< std::pair<int, FileMetaData> > new_files_;
 };
 

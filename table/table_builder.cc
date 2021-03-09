@@ -46,7 +46,7 @@ struct TableBuilder::Rep {
   // 则我们可以为该 data block 的 index 数据项设置 key "the r", 因为它 >= 当前 data block 全部 key, 
   // 而且 < 接下来 data block 的全部 key. 
   //
-  // 不变式：仅当 data_block 为空的时候 r->pending_index_entry 才为 true. 
+  // 不变式: 仅当 data_block 为空的时候 r->pending_index_entry 才为 true. 
   bool pending_index_entry;
   // 指向当前正在构造的 data block 的 BlockHandle
   BlockHandle pending_handle;  // Handle to add to index block

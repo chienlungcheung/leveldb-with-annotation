@@ -122,6 +122,7 @@ void FilterBlockBuilder::GenerateFilter() {
   start_.clear();
 }
 
+// 反序列化 filter block.
 // 使用一个 FilterPolicy 和一个 filter block 构造一个 FilterBlockReader. 
 // 注意两个参数生命期非常关键, 因为直接存的地址, 它们不能先于此处构造的对象死掉. 
 FilterBlockReader::FilterBlockReader(const FilterPolicy* policy,
@@ -132,14 +133,21 @@ FilterBlockReader::FilterBlockReader(const FilterPolicy* policy,
       num_(0),
       base_lg_(0) {
   size_t n = contents.size();
-  // filter block 最后 5 个字节依次是 filter offset array 的起始偏移量(4 字节), base 的 log 值(1 字节). 
-  if (n < 5) return;  // 1 byte for base_lg_ and 4 for start of offset array
-  base_lg_ = contents[n-1]; // 读取 base log 值
-  uint32_t last_word = DecodeFixed32(contents.data() + n - 5); // 读取 offset array 起始偏移量
+  // filter block 最后 5 个字节依次是: 
+  // - filter offset array 的起始偏移量(4 字节), 
+  // - base 的 log 值(1 字节). 
+  if (n < 5) return;
+  // 读取 base log 值
+  base_lg_ = contents[n-1]; 
+  // 读取 offset array 起始偏移量
+  uint32_t last_word = DecodeFixed32(contents.data() + n - 5); 
   if (last_word > n - 5) return;
-  data_ = contents.data(); // filter block 起始地址
-  offset_ = data_ + last_word; // offset array 起始地址
-  num_ = (n - 5 - last_word) / 4; // offset array 元素(每个占 4 字节)个数
+  // filter block 起始地址
+  data_ = contents.data(); 
+  // offset array 起始地址
+  offset_ = data_ + last_word; 
+  // offset array 中元素(每个占 4 字节)的个数
+  num_ = (n - 5 - last_word) / 4; 
 }
 
 // 通过过滤器查询 key 是否在以 block_offset 为起始地址的 block 中

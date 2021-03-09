@@ -129,19 +129,19 @@ class Limiter {
   // 库中所有原子操作的默认行为提供序列一致顺序(见后述讨论). 该默认行为可能有损性能, 
   //   不过可以给予库的原子操作额外的 std::memory_order 参数, 以指定附加制约, 在原子性外(注意, 原子性和操作顺序是两件事), 
   //   编译器和处理器还必须强制该操作. 
-  // - memory_order_relaxed	宽松操作：没有同步或顺序制约, 仅对此操作要求原子性. (宽松顺序见 https://zh.cppreference.com/w/cpp/atomic/memory_order#.E5.AE.BD.E6.9D.BE.E9.A1.BA.E5.BA.8F)
-  // - memory_order_consume	有此内存顺序的加载操作, 在其影响的内存位置进行 consume 操作(相比 acquire 粒度更细, 只限制操作对象)：
+  // - memory_order_relaxed	宽松操作: 没有同步或顺序制约, 仅对此操作要求原子性. (宽松顺序见 https://zh.cppreference.com/w/cpp/atomic/memory_order#.E5.AE.BD.E6.9D.BE.E9.A1.BA.E5.BA.8F)
+  // - memory_order_consume	有此内存顺序的加载操作, 在其影响的内存位置进行 consume 操作(相比 acquire 粒度更细, 只限制操作对象): 
   //                            当前线程中依赖于当前加载的该值的读或写不能被重排到此加载前. 
   //                        其他释放同一原子变量的线程的对数据依赖变量的写入, 为当前线程所可见. 
   //                        在大多数平台上, 这只影响到编译器优化. 
-  // - memory_order_acquire	有此内存顺序的加载操作, 在其影响的内存位置进行 acquire 操作：
+  // - memory_order_acquire	有此内存顺序的加载操作, 在其影响的内存位置进行 acquire 操作: 
   //                            当前线程中在 acquire 后的任意读或写不能被重排到此加载前. 
   //                        其他释放同一原子变量的线程的所有写入, 能为当前线程所见. 
-  // - memory_order_release	有此内存顺序的存储操作进行 release 操作：
+  // - memory_order_release	有此内存顺序的存储操作进行 release 操作: 
   //                            当前线程中在 release 之前的任意读或写不能被重排到此存储后. 
   //                        当前线程的所有写入, 可见于获得该同一原子变量的其他线程释放获得顺序, 
   //                        并且对该原子变量的带依赖写入变得对于其他消费同一原子对象的线程可见. 
-  // - memory_order_acq_rel	带此内存顺序的读修改写操作既是 acquire 操作又是 release 操作：
+  // - memory_order_acq_rel	带此内存顺序的读修改写操作既是 acquire 操作又是 release 操作: 
   //                            当前线程的任意读或写内存不能被重排到此存储前或后. 
   //                        所有释放同一原子变量的线程的写入可见于修改之前, 而且修改可见于其他获得同一原子变量的线程. 
   // - memory_order_seq_cst	有此内存顺序的加载操作进行 acquire 操作, 存储操作进行 release 操作, 而读改写操作进行 acquire 操作和 release 操作, 
@@ -924,7 +924,7 @@ namespace {
 
 // Wraps an Env instance whose destructor is never created.
 //
-// 封装了一个 Env 具体实现, 该实现的析构函数永远不会被调用. 具体用法如下：
+// 封装了一个 Env 具体实现, 该实现的析构函数永远不会被调用. 具体用法如下: 
 // Intended usage:
 //   using PlatformSingletonEnv = SingletonEnv<PlatformEnv>;
 //   void ConfigurePosixEnv(int param) {

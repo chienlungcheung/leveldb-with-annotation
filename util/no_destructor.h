@@ -54,11 +54,11 @@ class NoDestructor {
   //
   // 关于对齐的描述具体见 https://en.cppreference.com/w/cpp/language/object#Alignment
   //
-  // 内存对齐的主要作用是(http://www.cppblog.com/snailcong/archive/2009/03/16/76705.html)：
-  // 1、  平台原因(移植原因)：不是所有的硬件平台都能访问任意地址上的任意数据的; 某些硬件平台只能在某些地址处取某些特定类型的数据, 否则抛出硬件异常. 
-  // 2、  性能原因：经过内存对齐后, CPU的内存访问速度大大提升. 
+  // 内存对齐的主要作用是(http://www.cppblog.com/snailcong/archive/2009/03/16/76705.html): 
+  // 1、  平台原因(移植原因): 不是所有的硬件平台都能访问任意地址上的任意数据的; 某些硬件平台只能在某些地址处取某些特定类型的数据, 否则抛出硬件异常. 
+  // 2、  性能原因: 经过内存对齐后, CPU的内存访问速度大大提升. 
   //
-  // 所以下面的 instance_storage_ 变量的存储空间满足：字节个数最小为 sizeof(InstanceType), 并且按照 alignof(InstanceType) 进行对齐. 
+  // 所以下面的 instance_storage_ 变量的存储空间满足: 字节个数最小为 sizeof(InstanceType), 并且按照 alignof(InstanceType) 进行对齐. 
   typename
       std::aligned_storage<sizeof(InstanceType), alignof(InstanceType)>::type
       instance_storage_;

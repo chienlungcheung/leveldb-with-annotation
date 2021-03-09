@@ -32,7 +32,7 @@ assert(status.ok());
 If you want to raise an error if the database already exists, add the following
 line before the `leveldb::DB::Open` call:
 
-如果你想在数据库已存在的时候引发一个异常, 将下面这行加到 `leveldb::DB::Open` 调用之前：
+如果你想在数据库已存在的时候引发一个异常, 将下面这行加到 `leveldb::DB::Open` 调用之前: 
 
 ```c++
 options.error_if_exists = true;
@@ -44,7 +44,7 @@ You may have noticed the `leveldb::Status` type above. Values of this type are
 returned by most functions in leveldb that may encounter an error. You can check
 if such a result is ok, and also print an associated error message:
 
-你可能注意到上面的 `leveldb::Status` 类型了. 该类型的值会被 leveldb 中大部分函数在遭遇错误的时候返回. 你可以检查它释放为 ok, 然后打印关联的错误信息即可：
+你可能注意到上面的 `leveldb::Status` 类型了. 该类型的值会被 leveldb 中大部分函数在遭遇错误的时候返回. 你可以检查它释放为 ok, 然后打印关联的错误信息即可: 
 
 ```c++
 leveldb::Status s = ...;
@@ -55,7 +55,7 @@ if (!s.ok()) cerr << s.ToString() << endl;
 
 When you are done with a database, just delete the database object. Example:
 
-当数据库不再使用的时候, 像下面这样直接删除数据库对象就可以了：
+当数据库不再使用的时候, 像下面这样直接删除数据库对象就可以了: 
 
 ```c++
 ... open the db as described above ...
@@ -121,7 +121,7 @@ persistent storage. (On Posix systems, this is implemented by calling either
 `fsync(...)` or `fdatasync(...)` or `msync(..., MS_SYNC)` before the write
 operation returns.)
 
-默认 leveldb 每个写操作都是异步的：进程把要写的内容 push 给操作系统后立马返回. 从操作系统内存到底层持久性存储的迁移异步地发生. 当然, 也可以把某个写操作的 sync 标识打开, 以等到数据真正被记录到持久化存储再让写操作返回. (在 Posix 系统上, 这是通过在写操作返回前调用 `fsync(...)` 或 `fdatasync(...)` 或 `msync(..., MS_SYNC)` 来实现的. )
+默认 leveldb 每个写操作都是异步的: 进程把要写的内容 push 给操作系统后立马返回. 从操作系统内存到底层持久性存储的迁移异步地发生. 当然, 也可以把某个写操作的 sync 标识打开, 以等到数据真正被记录到持久化存储再让写操作返回. (在 Posix 系统上, 这是通过在写操作返回前调用 `fsync(...)` 或 `fdatasync(...)` 或 `msync(..., MS_SYNC)` 来实现的. )
 
 ```c++
 leveldb::WriteOptions write_options;
@@ -220,7 +220,7 @@ of the current state.
 
 Snapshots are created by the `DB::GetSnapshot()` method:
 
-快照通过调用 `ReadOptions::snapshot` 方法创建： 
+快照通过调用 `ReadOptions::snapshot` 方法创建:  
 ```c++
 leveldb::ReadOptions options;
 // 更新之前创建一个快照
@@ -256,7 +256,7 @@ contain `'\0'` bytes.
 C++ strings and null-terminated C-style strings can be easily converted to a
 Slice:
 
-C++ 风格的 string 和 C 风格的空字符结尾的字符串很容易转换为一个切片：
+C++ 风格的 string 和 C 风格的空字符结尾的字符串很容易转换为一个切片: 
 
 ```c++
 leveldb::Slice s1 = "hello";
@@ -267,7 +267,7 @@ leveldb::Slice s2 = str;
 
 A Slice can be easily converted back to a C++ string:
 
-一个切片也很容易转换回 C++ 风格的字符串：
+一个切片也很容易转换回 C++ 风格的字符串: 
 
 ```c++
 std::string str = s1.ToString();
@@ -278,7 +278,7 @@ Be careful when using Slices since it is up to the caller to ensure that the
 external byte array into which the Slice points remains live while the Slice is
 in use. For example, the following is buggy:
 
-注意, 当使用切片时, 调用者要确保它内部指针指向的外部字节数组保持存活. 比如, 下面的代码就有问题：
+注意, 当使用切片时, 调用者要确保它内部指针指向的外部字节数组保持存活. 比如, 下面的代码就有问题: 
 
 ```c++
 leveldb::Slice slice;
@@ -302,7 +302,7 @@ a database.  For example, suppose each database key consists of two numbers and
 we should sort by the first number, breaking ties by the second number. First,
 define a proper subclass of `leveldb::Comparator` that expresses these rules:
 
-前面的例子中用的都是默认的比较函数, 即逐字节字典序比较函数. 你可以定制自己的比较函数, 然后在打开数据库的时候传入. 只需继承 `leveldb::Comparator` 然后定义相关逻辑即可, 下面是一个例子：
+前面的例子中用的都是默认的比较函数, 即逐字节字典序比较函数. 你可以定制自己的比较函数, 然后在打开数据库的时候传入. 只需继承 `leveldb::Comparator` 然后定义相关逻辑即可, 下面是一个例子: 
 
 ```c++
 class TwoPartComparator : public leveldb::Comparator {
@@ -331,7 +331,7 @@ class TwoPartComparator : public leveldb::Comparator {
 
 Now create a database using this custom comparator:
 
-然后使用上面定义的比较器打开数据库：
+然后使用上面定义的比较器打开数据库: 
 
 ```c++
 // 实例化比较器
@@ -396,7 +396,7 @@ very fast, and is automatically disabled for uncompressible data. In rare cases,
 applications may want to disable compression entirely, but should only do so if
 benchmarks show a performance improvement:
 
-每个 block 在写入持久存储之前都会被单独压缩. 压缩默认是开启的, 因为默认的压缩算法非常快, 而且对于不能压缩的数据会自动关闭压缩. 极少的场景会让用户想要完全关闭压缩功能, 除非基准测试显示关闭压缩会显著改善性能. 按照下面方式做就关闭了压缩功能：
+每个 block 在写入持久存储之前都会被单独压缩. 压缩默认是开启的, 因为默认的压缩算法非常快, 而且对于不能压缩的数据会自动关闭压缩. 极少的场景会让用户想要完全关闭压缩功能, 除非基准测试显示关闭压缩会显著改善性能. 按照下面方式做就关闭了压缩功能: 
 
 ```c++
 leveldb::Options options;
@@ -437,7 +437,7 @@ cached contents. A per-iterator option can be used to achieve this:
 
 注意 cache 保存的是未压缩的数据, 因此应该根据应用程序所需的数据大小来设置它的大小. (已经压缩的数据的缓存工作交给操作系统的 buffer cache 或者用户提供的定制的 Env 实现去干. )
 
-当执行一个大块数据读操作时, 应用程序可能想要取消缓存功能, 这样通过大块读进来数据就不会导致 cache 中当前大部分数据被置换出去. 我们可以为它提供一个单独的 iterator 来达到目的：
+当执行一个大块数据读操作时, 应用程序可能想要取消缓存功能, 这样通过大块读进来数据就不会导致 cache 中当前大部分数据被置换出去. 我们可以为它提供一个单独的 iterator 来达到目的: 
 
 ```c++
 leveldb::ReadOptions options;
@@ -471,7 +471,7 @@ the metadata do not force us to fetch and cache bulky file contents.
 
 注意, 磁盘传输的单位以及磁盘缓存的单位都是一个 block. 相邻的 keys(已排序)总是在同一个 block 中. 因此应用程序可以通过把需要一起访问的 keys 放在一起, 同时把不经常使用的 keys 放到一个独立的键空间区域来提升性能. 
 
-举个例子, 假设我们正基于 leveldb 实现一个简单的文件系统. 我们打算存储到这个文件系统的数据项类型如下：
+举个例子, 假设我们正基于 leveldb 实现一个简单的文件系统. 我们打算存储到这个文件系统的数据项类型如下: 
 
     filename -> permission-bits, length, list of file_block_ids
     file_block_id -> data
@@ -516,7 +516,7 @@ comparator that ignores trailing spaces when comparing keys.
 application should provide a custom filter policy that also ignores trailing
 spaces. For example:
 
-如果你在使用定制的比较器, 你应该确保你在用的过滤器策略与你的比较器兼容. 举个例子, 如果一个比较器在比较键的时候忽略结尾的空格, 那么`NewBloomFilterPolicy` 一定不能与此比较器共存. 相反, 应用应该提供一个定制的过滤器策略, 而且它也应该忽略键的尾部空格. 示例如下：
+如果你在使用定制的比较器, 你应该确保你在用的过滤器策略与你的比较器兼容. 举个例子, 如果一个比较器在比较键的时候忽略结尾的空格, 那么`NewBloomFilterPolicy` 一定不能与此比较器共存. 相反, 应用应该提供一个定制的过滤器策略, 而且它也应该忽略键的尾部空格. 示例如下: 
 
 ```c++
 class CustomFilterPolicy : public leveldb::FilterPolicy {
@@ -553,7 +553,7 @@ leveldb associates checksums with all data it stores in the file system. There
 are two separate controls provided over how aggressively these checksums are
 verified:
 
-leveldb 将一个校验和与它存储在文件系统中的全部数据进行关联. 根据激进程度有两种方式控制校验和的核对：
+leveldb 将一个校验和与它存储在文件系统中的全部数据进行关联. 根据激进程度有两种方式控制校验和的核对: 
 
 `ReadOptions::verify_checksums` may be set to true to force checksum
 verification of all data that is read from the file system on behalf of a
@@ -638,7 +638,7 @@ implementation.  See `leveldb/util/env_posix.h` for an example.
 Details about the leveldb implementation may be found in the following
 documents:
 
-关于 leveldb 实现的更多细节请见下面的文档：
+关于 leveldb 实现的更多细节请见下面的文档: 
 
 1. [Implementation notes](impl.md)
 2. [Format of an immutable Table file](table_format.md)

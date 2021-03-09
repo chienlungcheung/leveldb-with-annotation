@@ -72,6 +72,7 @@ class LEVELDB_EXPORT DB {
    * 存储 nullptr 到 *dbptr 同时返回一个错误状态. 
    *
    * 调用者不再使用这个数据库时需要负责释放 *dbptr 指向的内存. 
+   * 
    * @param options 控制数据库行为和性能的参数配置
    * @param name 数据库名称
    * @param dbptr 存储指向堆内存中数据库的指针
@@ -205,7 +206,7 @@ class LEVELDB_EXPORT DB {
    * DB 可以通过该方法导出自身状态信息. 如果提供的属性可以被 DB 实现理解, 那么第二个参数将会
    * 存储该属性对应的当前值同时该方法返回 true, 其它情况该方法返回 false. 
    *
-   * 合法的属性名称包括：
+   * 合法的属性名称包括: 
    *
    * "leveldb.num-files-at-level<N>" - 返回 level <N> 的文件个数, 其中 <N> 是一个 ASCII 格式的数字. 
    *
@@ -258,7 +259,7 @@ class LEVELDB_EXPORT DB {
    * 压实过程中, 已经被删除或者被覆盖过的数据会被丢弃, 同时会将数据重新安放以减少后续数据访问操作的成本. 
    * 这个操作是为那些理解底层实现的用户准备的. 
    *
-   * 如果 begin==nullptr, 则从第一个键开始; 如果 end==nullptr 则到最后一个键为止. 所以, 如果像下面这样做则意味着压紧整个数据库：
+   * 如果 begin==nullptr, 则从第一个键开始; 如果 end==nullptr 则到最后一个键为止. 所以, 如果像下面这样做则意味着压紧整个数据库: 
    *
    * db->CompactRange(nullptr, nullptr);
    * @param begin 起始键
@@ -275,7 +276,7 @@ class LEVELDB_EXPORT DB {
 /**
  * 销毁指定数据库的全部内容, 该方法请慎用. 
  *
- * 注意：为了保持向后兼容, 如果该方法无法列出数据库文件, 仍会返回 Status::OK() 以掩盖这种失败. 
+ * 注意: 为了保持向后兼容, 如果该方法无法列出数据库文件, 仍会返回 Status::OK() 以掩盖这种失败. 
  * @param name 要销毁的数据库名称
  * @param options 销毁时使用的配置参数
  * @return

@@ -11,7 +11,7 @@
 namespace leveldb {
 // log 文件内容是一系列 blocks, 每个 block 大小为 32KB. 唯一的例外就是, log 文件末尾可能包含一个不完整的 block. 
 //
-// 每个 block 由一系列 records 构成：
+// 每个 block 由一系列 records 构成: 
 //
 //    block := record* trailer? // 即 0 或多个 records, 0 或 1 个 trailer, 总大小为 4 + 2 + 1 + length + trailer 大小
 //    record :=

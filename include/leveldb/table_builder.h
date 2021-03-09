@@ -63,8 +63,8 @@ class LEVELDB_EXPORT TableBuilder {
   // REQUIRES: Finish(), Abandon() have not been called
   //
   // 将一对 key,value 传入正在构造的 table. 
-  // 要求 1：key 必须大于任何之前已经添加过的 key
-  // 要求 2：还没调用过 Finish() 或者 Abandon()
+  // 要求 1: key 必须大于任何之前已经添加过的 key
+  // 要求 2: 还没调用过 Finish() 或者 Abandon()
   void Add(const Slice& key, const Slice& value);
 
   // Advanced operation: flush any buffered key/value pairs to file.
@@ -72,10 +72,10 @@ class LEVELDB_EXPORT TableBuilder {
   // the same data block.  Most clients should not need to use this method.
   // REQUIRES: Finish(), Abandon() have not been called
   //
-  // 高级操作：将缓冲的全部 key,value 对写到文件. 
+  // 高级操作: 将缓冲的全部 key,value 对写到文件. 
   // 该方法可以用于实现不将临近的两个数据项写入同一个 data block. 
   // 大部分客户端不需要调用该方法. 
-  // 要求：还没调用过 Finish() 或者 Abandon(). 
+  // 要求: 还没调用过 Finish() 或者 Abandon(). 
   void Flush();
 
   // Return non-ok iff some error has been detected.
@@ -88,8 +88,8 @@ class LEVELDB_EXPORT TableBuilder {
   // REQUIRES: Finish(), Abandon() have not been called
   //
   // 完成 table 构建. 该方法返回后停止使用在构造方法中传入的文件. 
-  // 要求：还没调用过 Finish() 或者 Abandon(). 
-  // table 构成：data blocks, filter block, metaindex block, index block
+  // 要求: 还没调用过 Finish() 或者 Abandon(). 
+  // table 构成: data blocks, filter block, metaindex block, index block
   Status Finish();
 
   // Indicate that the contents of this builder should be abandoned.  Stops
@@ -100,7 +100,7 @@ class LEVELDB_EXPORT TableBuilder {
   //
   // 指示该 TableBuilder 对应的内容应该丢弃. 该方法返回后停止使用在构造方法中传入的文件. 
   // 如果调用者不打算调用 Finish() 则在销毁该 TableBuilder 之前必须调用 Abandon. 
-  // 要求：还没调用过 Finish() 或者 Abandon(). 
+  // 要求: 还没调用过 Finish() 或者 Abandon(). 
   void Abandon();
 
   // Number of calls to Add() so far.
