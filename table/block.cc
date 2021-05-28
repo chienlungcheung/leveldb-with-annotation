@@ -27,18 +27,23 @@ inline uint32_t Block::NumRestarts() const {
 Block::Block(const BlockContents& contents)
     : data_(contents.data.data()),
       size_(contents.data.size()),
-      owned_(contents.heap_allocated) { //　当数据存储在堆上的时候 owned_ 才为 true
-  if (size_ < sizeof(uint32_t)) { // block 最后 4 字节用于存储 restart 个数, 所以最小也为 4 字节长度
+      owned_(contents.heap_allocated) { 
+  //　当数据存储在堆上的时候 owned_ 才为 true
+  if (size_ < sizeof(uint32_t)) { 
+    // block 最后 4 字节用于存储 restart 个数, 所以最小也为 4 字节长度
     size_ = 0;  // Error marker
   } else {
-    // 该 Block 最多可以分配的 restart 的个数, 其中每个 restart 为 4 字节偏移量, 
-    // 在构建 block 的时候会每隔一段设置一个 restart point, 位于 restart point 的数据项的 key 不会进行前缀压缩, 此项之后
+    // 该 Block 最多可以分配的 restart 的个数, 其中每个 restart 
+    // 为 4 字节偏移量.
+    // 在构建 block 的时候会每隔一段设置一个 restart point, 
+    // 位于 restart point 的数据项的 key 不会进行前缀压缩, 此项之后
     // 的数据项会相对于前一个数据项进行前缀压缩直至下一个 restart  point. 
     // block 最后 4 字节用于存储 restart 个数, 所以计算时不能算在内. 
     size_t max_restarts_allowed = (size_-sizeof(uint32_t)) / sizeof(uint32_t);
     if (NumRestarts() > max_restarts_allowed) {
-      // The size is too small for NumRestarts()
-      size_ = 0; // 如果实际的 restart 总数超过了上面计算的最大值, 那该 Block 空间太小了, 肯定有问题
+      // 如果实际的 restart 总数超过了上面计算的最大值, 
+      // 那该 Block 空间太小了, 肯定有问题
+      size_ = 0; 
     } else {
       // 最后一个 uint_32 存的是 restart 个数, 不能用于存放 restart; 
       // 全部 restart 占用字节数为 NumRestarts() * sizeof(uint32_t); 

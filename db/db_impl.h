@@ -90,7 +90,7 @@ class DBImpl : public DB {
   // log-file/memtable and writes a new descriptor iff successful.
   // Errors are recorded in bg_error_.
   //
-  // 将内存中的 memtable 转换为 sorted table 文件并写入到磁盘中. 
+  // 将内存中的 memtable 转换为 sorted string table 文件并写入到磁盘中. 
   // 当且仅当该方法执行成功后, 切换到一组新的 log-file/memetable 组合并且写一个新的描述符. 
   // 如果执行失败, 则将错误记录到 bg_error_. 
   void CompactMemTable() EXCLUSIVE_LOCKS_REQUIRED(mutex_);

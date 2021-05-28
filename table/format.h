@@ -69,9 +69,6 @@ class BlockHandle {
   uint64_t size_;
 };
 
-// Footer encapsulates the fixed information stored at the tail
-// end of every table file.
-//
 // Footer 封装一个固定长度的信息, 它位于每个 table 文件的末尾. 
 //
 // 在每个 sstable 文件的末尾是一个固定长度的 footer, 
@@ -81,15 +78,11 @@ class Footer {
  public:
   Footer() { }
 
-  // The block handle for the metaindex block of the table
-  //
   // 与 metaindex 块的 BlockHandle 相关的 getter/setter
   const BlockHandle& metaindex_handle() const { return metaindex_handle_; }
   void set_metaindex_handle(const BlockHandle& h) { metaindex_handle_ = h; }
 
-  // The block handle for the index block of the table
-  //
-  // 与 index 块的 BlockHandle 相关的 getter/setter
+  // 与 data index 块的 BlockHandle 相关的 getter/setter
   const BlockHandle& index_handle() const {
     return index_handle_;
   }
@@ -100,10 +93,6 @@ class Footer {
   void EncodeTo(std::string* dst) const;
   Status DecodeFrom(Slice* input);
 
-  // Encoded length of a Footer.  Note that the serialization of a
-  // Footer will always occupy exactly this many bytes.  It consists
-  // of two block handles and a magic number.
-  //
   // Footer 长度编码后的长度. 注意, 它就固定这么长. 
   // Footer 包含了一个 metaindex_handle、一个 index_handle、以及一个魔数. 
   enum {

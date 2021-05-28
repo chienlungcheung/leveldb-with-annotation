@@ -17,24 +17,24 @@ several different types of files as documented below:
 
 A log file (*.log) stores a sequence of recent updates. Each update is appended
 to the current log file. When the log file reaches a pre-determined size
-(approximately 4MB by default), it is converted to a sorted table (see below)
+(approximately 4MB by default), it is converted to a sorted string table (see below)
 and a new log file is created for future updates.
 
 A copy of the current log file is kept in an in-memory structure (the
 `memtable`). This copy is consulted on every read so that read operations
 reflect all logged updates.
 
-一个 log 文件(*.log)保存着最近一系列更新操作, 它相当于 leveldb 的 WAL(write-ahead log). 每个更新操作都被追加到当前的 log 文件中. 当 log 文件大小达到一个预定义的大小时(默认大约 4MB), 这个 log 文件就会被转换为一个 sorted table (见下文)然后一个新的 log 文件就会被创建以保存未来的更新操作. 
+一个 log 文件(*.log)保存着最近一系列更新操作, 它相当于 leveldb 的 WAL(write-ahead log). 每个更新操作都被追加到当前的 log 文件中. 当 log 文件大小达到一个预定义的大小时(默认大约 4MB), 这个 log 文件就会被转换为一个 sorted string table (见下文)然后一个新的 log 文件就会被创建以保存未来的更新操作. 
 
-当前 log 文件内容同时也会被记录到一个内存数据结构中(即 `memtable`). 这个结构加上全部 sorted tables (*.ldb) 才是完整数据, 一起确保每个读操作都能查到当前最新. 
+当前 log 文件内容同时也会被记录到一个内存数据结构中(即 `memtable`). 这个结构加上全部 sorted string tables (*.ldb) 才是完整数据, 一起确保每个读操作都能查到当前最新. 
 
-## Sorted tables
+## sorted string tables
 
-A sorted table (*.ldb) stores a sequence of entries sorted by key. Each entry is
+A sorted string table (*.ldb) stores a sequence of entries sorted by key. Each entry is
 either a value for the key, or a deletion marker for the key. (Deletion markers
-are kept around to hide obsolete values present in older sorted tables).
+are kept around to hide obsolete values present in older sorted string tables).
 
-The set of sorted tables are organized into a sequence of levels. The sorted
+The set of sorted string tables are organized into a sequence of levels. The sorted
 table generated from a log file is placed in a special **young** level (also
 called level-0). When the number of young files exceeds a certain threshold
 (currently four), all of the young files are merged together with all of the
@@ -50,21 +50,21 @@ level-(L+1). These merges have the effect of gradually migrating new updates
 from the young level to the largest level using only bulk reads and writes
 (i.e., minimizing expensive seeks).
 
-sorted table(*.ldb) 文件就是 leveldb 的数据库文件了. 每个 sorted table 文件保存着按 key 排序的一系列数据项. 每个数据项要么是一个与某个 key 对应的 value, 要么是某个 key 的删除标记. (删除标记其它地方又叫墓碑消息, 用于声明时间线上在此之前的同名 key 对应的记录都失效了, 后台线程负责对这类记录进行压实, 即拷贝到另一个文件时物理删除这类记录.). 注意, leveldb 是一个 append 类型而非 MySQL 那种 in-place 修改的数据库.
+sorted string table(*.ldb) 文件就是 leveldb 的数据库文件了. 每个 sorted string table 文件保存着按 key 排序的一系列数据项. 每个数据项要么是一个与某个 key 对应的 value, 要么是某个 key 的删除标记. (删除标记其它地方又叫墓碑消息, 用于声明时间线上在此之前的同名 key 对应的记录都失效了, 后台线程负责对这类记录进行压实, 即拷贝到另一个文件时物理删除这类记录.). 注意, leveldb 是一个 append 类型而非 MySQL 那种 in-place 修改的数据库.
 
-sorted tables 文件被组织成一系列 levels. 一个 log 文件生成的对应 sorted table 文件会被放到一个特殊的 **young** level(也被叫做 level-0). 当 young 文件数目超过某个阈值(当前是 4), 全部 young 文件就会和 level-1 与之重叠的全部文件进行合并, 进而生成一系列新的 level-1 文件(每 2MB 数据就会生成一个新的 level-1 文件). 
+sorted string tables 文件被组织成一系列 levels. 一个 log 文件生成的对应 sorted string table 文件会被放到一个特殊的 **young** level(也被叫做 level-0). 当 young 文件数目超过某个阈值(当前是 4), 全部 young 文件就会和 level-1 与之重叠的全部文件进行合并, 进而生成一系列新的 level-1 文件(每 2MB 数据就会生成一个新的 level-1 文件). 
 
 young level 的文件之间可能存在键区间重叠, 但是其它每层 level 内部文件之间是不存在重叠情况的. 我们下面来说下 level-1 及其以上的 level 的文件如何合并. 当 level-L (L >= 1)的文件总大小超过了 10^L MB(即 level-1 超过了 10MB, level-2 超过了 100MB, ...), 此时一个 level-L 文件就会和 level-(L+1) 中与自己键区间重叠的全部文件进行合并, 然后为 level-(L+1) 生成一组新的文件. 这些合并操作可以实现将 young level 中新的 updates 一点一点搬到最高的那层 level, 这个迁移过程使用的都是块读写(最小化了昂贵的 seek 操作的时间消耗). 
 
 ### Manifest
 
-A MANIFEST file lists the set of sorted tables that make up each level, the
+A MANIFEST file lists the set of sorted string tables that make up each level, the
 corresponding key ranges, and other important metadata. A new MANIFEST file
 (with a new number embedded in the file name) is created whenever the database
 is reopened. The MANIFEST file is formatted as a log, and changes made to the
 serving state (as files are added or removed) are appended to this log.
 
-MANIFEST 文件可以看作 leveldb 存储元数据的地方. 它列出了每一个 level 及其包含的全部 sorted table 文件, 每个 sorted table 文件对应的键区间, 以及其它重要的元数据. 每当重新打开数据库的时候, 就会创建一个新的 MANIFEST 文件(文件名中嵌有一个新生成的数字). MANIFEST 文件被格式化成日志文件, 针对它所服务的数据的变更都会被追加到该文件后面. 比如每当某个 level 发生文件新增或者删除操作时, 就会有一条日志被追加到 MANIFEST 中. 
+MANIFEST 文件可以看作 leveldb 存储元数据的地方. 它列出了每一个 level 及其包含的全部 sorted string table 文件, 每个 sorted string table 文件对应的键区间, 以及其它重要的元数据. 每当重新打开数据库的时候, 就会创建一个新的 MANIFEST 文件(文件名中嵌有一个新生成的数字). MANIFEST 文件被格式化成日志文件, 针对它所服务的数据的变更都会被追加到该文件后面. 比如每当某个 level 发生文件新增或者删除操作时, 就会有一条日志被追加到 MANIFEST 中. 
 
 ### Current
 
@@ -103,7 +103,7 @@ In the background:
 
 同时在后台: 
 
-1. 将前一个 memtable 内容写到一个 sstable 即 sorted table 文件. 
+1. 将前一个 memtable 内容写到一个 sstable 即 sorted string table 文件. 
 2. 丢弃这个 memtable. 
 3. 删除老的 log 文件和老的 memtable. 
 4. 把新生成的 sstable 放到到 level-0. 
@@ -180,13 +180,13 @@ Solution 3: We work on reducing the cost of very wide merges. Perhaps most of
 the level-0 files will have their blocks sitting uncompressed in the cache and
 we will only need to worry about the O(N) complexity in the merging iterator.
 
-Level-0 压实将会从 level-0 读取 4 个 1MB 文件(log 文件说明部分提到当 log 文件增长到 4MB 就会被转成一个 sorted table, 这里看应该是转成 4 个, 每个 1MB 大小. compaction 部分提到 level-0 文件个数达到 4 就触发 level-0 压实, 这么看应该是每次 log 达到 4MB 会触发 sorted table 生成, 同时会触发压实.), 最坏情况下同时会把 level-1 全部 10MB 文件都读进来(即该层全部文件都和 level-0 有重叠). 这种情况下我们会读取 14MB 写入 14MB. 
+Level-0 压实将会从 level-0 读取 4 个 1MB 文件(log 文件说明部分提到当 log 文件增长到 4MB 就会被转成一个 sorted string table, 这里看应该是转成 4 个, 每个 1MB 大小. compaction 部分提到 level-0 文件个数达到 4 就触发 level-0 压实, 这么看应该是每次 log 达到 4MB 会触发 sorted string table 生成, 同时会触发压实.), 最坏情况下同时会把 level-1 全部 10MB 文件都读进来(即该层全部文件都和 level-0 有重叠). 这种情况下我们会读取 14MB 写入 14MB. 
 
 除了特殊的 level-0 压实过程, 我们会从 level L 选取一个 2MB 大小的文件. 最坏情况下, 这会与 level L+1 层大约 12 个文件发生重叠(其中 10 个是因为 level-(L+1) 大小是 level-L 的十倍所以是 10 个, 另外 2 个(作为前面提到的 10 个文件前后的边界文件)是因为 level-L 的文件区间通常不与 level-(L+1) 对齐). 因此压实会读取 26MB 写入 26MB. 假设磁盘 IO 速度为 100MB/s(现代的磁盘驱动大约就这速度), 最坏情况下的压实将会消耗大约 0.5 秒(读写共 52MB, 读或者写都需要寻道, 两个操作是串行的). 
 
 假如我们把后台写入速度限制到一个比较小的值, 比如全速(100MB/s) 的 10%, 上面提到的一次压实大约消耗 5 秒. 如果用户以 10MB/s 的速度写磁盘, 我们可能会生成大量的 level-0 文件(写得慢, 合并就慢, 就会导致 level-0 文件变多)(5 秒, 每秒 10MB, 每个 level-0 文件 1MB, 那么就是大约 50 个文件来保存 5*10MB 数据). 这会显著增加读操作时间消耗, 因为压实进行的慢, 导致每次查询操作需要读取更多文件(因为 level-0 文件键区间可能彼此重叠, 压实进行得慢就会有非常多小文件, 为了获取需要的数据, 每次读都需要合并这些文件进行去重).
 
-解决方案 1: 为了缓解这个问题的影响, 我们可能会想要在 level-0 文件太多的时候调大 log 文件转换为 sorted table 的阈值. 但这么做的缺点是, 这个阈值越大, 我们需要更多的内存来维持其对应的 memtable. 
+解决方案 1: 为了缓解这个问题的影响, 我们可能会想要在 level-0 文件太多的时候调大 log 文件转换为 sorted string table 的阈值. 但这么做的缺点是, 这个阈值越大, 我们需要更多的内存来维持其对应的 memtable. 
 
 解决方案 2: 我们可能想要在 level-0 文件个数蹿升时人工减小写入速度(这里的写入指的是外部调用 leveldb 写操作的速度, 而不是磁盘写入速度). 
 

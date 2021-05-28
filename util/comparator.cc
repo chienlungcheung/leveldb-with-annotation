@@ -34,29 +34,39 @@ class BytewiseComparatorImpl : public Comparator {
   virtual void FindShortestSeparator(
       std::string* start,
       const Slice& limit) const {
-    // Find length of common prefix
+    // 公共前缀的最长长度
     size_t min_length = std::min(start->size(), limit.size());
+    // 标记 start 和 limit 第一个互异的字符索引
     size_t diff_index = 0;
+    // 寻找 start 和 limit 对应字符串的最长共同前缀 
     while ((diff_index < min_length) &&
-           ((*start)[diff_index] == limit[diff_index])) { // 寻找最长共同前缀, diff_index 是共同前缀长度
+           ((*start)[diff_index] == limit[diff_index])) { 
       diff_index++;
     }
 
-    // 如果输入参数中两个参数, 一个是另一个的前缀, 肯定是 start 是 limit 的前缀, 
-    // 则不需要进行缩短, 保持 start 内容不变. 
     if (diff_index >= min_length) {
-      // Do not shorten if one string is a prefix of the other
+      // 如果输入参数中一个是另一个的前缀, 
+      // 则不需要进行缩短, 保持 start 内容不变. 
+      // TODO: 这个地方我是不太明白. 包括下面 start 可能不变的情况.
     } else {
-      // 从 start 取出第一个与 limit 互异的字节并转换为 8 位无符号数放到 diff_byte
+      // 从 start 取出第一个与 limit 互异的字节并转换为 8 位无符号数
+      // 放到 diff_byte, 这个转换为了后面方便计算.
       uint8_t diff_byte = static_cast<uint8_t>((*start)[diff_index]);
       // 第一条件防止后面递增的时候溢出变为 0 导致递增反而值变小; 
-      // diff_byte 肯定与 limit[diff_index] 不等, 而且肯定是前者小于后者, 这个是参数语义以及上面寻找前缀决定的, 
-      // 第二个条件是递增的前提, 否则 diff_byte + 1 == limit[diff_index] 而且 diff_index 是 limit 最后一个字符, 
+      // diff_byte 肯定与 limit[diff_index] 不等, 
+      // 而且肯定是前者小于后者, 这个是参数语义以及上面寻找前缀决定的; 
+      // 第二个条件是递增的前提, 否则 
+      // diff_byte + 1 == limit[diff_index] 而且 diff_index 是 limit 最后一个字符, 
       // 那么递增后 start 大于等于 limit, 违背了限制条件结果需要落在 [start, limit). 
       if (diff_byte < static_cast<uint8_t>(0xff) &&
           diff_byte + 1 < static_cast<uint8_t>(limit[diff_index])) {
-        (*start)[diff_index]++; // 将 start 中第一个与 limit 互异的字节加 1
-        start->resize(diff_index + 1); // 将 start 截断, 长度为 diff_index + 1, 此时 start 比之前的值大, 而且长度更短. 
+        // 将 start 中第一个与 limit 互异的字节加 1
+        (*start)[diff_index]++; 
+        // 将 start 截断, 长度为 diff_index + 1, 
+        // 此时 start 比之前的值大(因为上面执行了 (*start)[diff_index]++), 
+        // 而且长度更短. 
+        start->resize(diff_index + 1); 
+        // 上面第二个条件决定了这里的断言必定成立.
         assert(Compare(*start, limit) < 0);
       }
     }

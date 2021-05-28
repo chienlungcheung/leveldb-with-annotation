@@ -14,7 +14,7 @@
 
 namespace leveldb {
 
-// 该方法用于将 memtable 序列化为 sorted table 文件并写入磁盘,
+// 该方法用于将 memtable 序列化为 sorted string table 文件并写入磁盘,
 // 同时确保该文件对应的 table 对象会被放到 table_cache_.
 //
 // 从迭代器 *iter 指向的 memtable 构造一个 Table 文件, 

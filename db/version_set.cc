@@ -291,7 +291,7 @@ Iterator* Version::NewConcatenatingIterator(const ReadOptions& options,
       &GetFileIterator, vset_->table_cache_, options);
 }
 
-// 将当前 version 维护的 level 架构中每一个 sorted table 文件对应的迭代器
+// 将当前 version 维护的 level 架构中每一个 sorted string table 文件对应的迭代器
 // 追加到 iters 向量里, 这些迭代器加上 memtable 的迭代器, 就能
 // 遍历整个数据库的内容了. 
 // 前提: 当前 Version 对象事先已经通过 VersionSet::SaveTo 方法被保存过了. 

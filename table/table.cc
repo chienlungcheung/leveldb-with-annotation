@@ -66,7 +66,7 @@ Status Table::Open(const Options& options,
 
   char footer_space[Footer::kEncodedLength];
   Slice footer_input;
-  // 读取 footer
+  // 读取 footer, 放到 footer_input
   Status s = file->Read(size - Footer::kEncodedLength, Footer::kEncodedLength,
                         &footer_input, footer_space);
   if (!s.ok()) return s;
@@ -77,7 +77,8 @@ Status Table::Open(const Options& options,
   if (!s.ok()) return s;
 
   /**
-   * 2 根据已解析的 Footer, 解析出 (data-)index block 存储到 index_block_contents.
+   * 2 根据已解析的 Footer, 解析出 index block(它保存了指向全部 data blocks 的索引) 
+   * 存储到 index_block_contents.
    */
   BlockContents index_block_contents;
   if (s.ok()) {
@@ -85,20 +86,20 @@ Status Table::Open(const Options& options,
     if (options.paranoid_checks) {
       opt.verify_checksums = true;
     }
-    // 读取 (data-)index block, 它的 BlockHandle 存储在 footer 里面
+    // 读取 index block, 它对应的 BlockHandle 存储在 footer 里面
     s = ReadBlock(file, opt, footer.index_handle(), &index_block_contents);
   }
 
   if (s.ok()) {
-    // 已经成功读取了 Footer 和 (data-)index block, 是时候读取 data 了. 
+    // 已经成功读取了 Footer 和 index block, 是时候读取 data 了. 
     Block* index_block = new Block(index_block_contents);
     Rep* rep = new Table::Rep;
     rep->options = options;
     rep->file = file;
-    // filter-index block 对应的 index (二级索引)
+    // filter-index block 对应的指针 (二级索引), 解析 footer 时候就拿到了.
     rep->metaindex_handle = footer.metaindex_handle();
     // data-index block 
-    // (注意它只是一个索引, 即 data block 们的索引, 
+    // (注意它只是一个索引, 即 data blocks 的索引, 
     //  真正使用的时候是基于 data-index block 做二级迭代器来进行查询,
     //  一级索引跨度大, 二级索引粒度小, 可以快速定位数据,
     //  具体见 Table::NewIterator() 方法)
@@ -110,7 +111,9 @@ Status Table::Open(const Options& options,
     rep->filter = nullptr;
     *table = new Table(rep);
     /**
-     * 3 根据已解析的 Footer, 解析出 meta block 存储到 Table::rep_.
+     * 3 根据已解析的 Footer 所包含的 metaindex block 指针, 
+     * 解析出 metaindex block, 再基于此解析出 mate block 
+     * 存储到 Table::rep_.
      */
     // 读取并解析 filter block 到 table::rep_, 
     // 它一般为布隆过滤器, 可以加速数据查询过程.
@@ -146,7 +149,7 @@ void Table::ReadMeta(const Footer& footer) {
     return;
   }
 
-  // 这个变量交 metaindex 更合适
+  // 这个变量叫 metaindex 更合适
   Block* meta = new Block(contents);
 
   // 为 metaindex block 创建一个迭代器

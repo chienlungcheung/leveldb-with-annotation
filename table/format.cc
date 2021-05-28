@@ -87,11 +87,12 @@ Status ReadBlock(RandomAccessFile* file,
   result->heap_allocated = false;
 
   /**
-   * 解析 block
+   * 解析 block.
+   * 读取 block 内容以及 type 和 crc. 
+   * 具体见 table_builder.cc 中构造这个结构的代码.
    */
-  // Read the block contents as well as the type/crc footer.
-  // See table_builder.cc for the code that built this structure.
-  size_t n = static_cast<size_t>(handle.size()); // 要读取的 block 的大小
+  // 要读取的 block 的大小
+  size_t n = static_cast<size_t>(handle.size()); 
   // 每个 block 后面跟着它的压缩类型 type (1 字节)和 crc (4 字节)
   char* buf = new char[n + kBlockTrailerSize]; 
   Slice contents;

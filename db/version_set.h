@@ -90,7 +90,7 @@ class Version {
     FileMetaData* seek_file;
     int seek_file_level;
   };
-  // 先查询当前在用的 memtable, 如果没有则查询正在转换为 sorted table 的 memtable 中寻找, 
+  // 先查询当前在用的 memtable, 如果没有则查询正在转换为 sorted string table 的 memtable 中寻找, 
   // 如果没有则我们在磁盘上采用从底向上 level-by-level 的寻找目标 key. 
   // 由于 level 越低数据越新, 因此, 当我们在一个较低的 level 找到数据的时候, 不用在更高的 levels 找了.
   // 由于 level-0 文件之间可能存在重叠, 而且针对同一个 key, 后产生的文件数据更新所以先将包含 key 的文件找出来

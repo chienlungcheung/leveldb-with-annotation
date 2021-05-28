@@ -52,18 +52,22 @@ class LEVELDB_EXPORT Comparator {
 
   // Advanced functions: these are used to reduce the space requirements
   // for internal data structures like index blocks.
-  // 下面两个是高级方法: 他们用于减少内部数据结构如 index blocks 的空间使用. 
+  // 下面两个是高级方法: 他们用于减少内部数据结构如 (sstable 中) index blocks 的空间使用. 
 
-  // If *start < limit, changes *start to a short string in [start,limit).
-  // Simple comparator implementations may return with *start unchanged,
-  // i.e., an implementation of this method that does nothing is correct.
+  // 顾名思义, 该方法用于找到区隔 start 和 limit 的最短字符串. 
+  // 
+  // 如果 *start < limit, 则把 *start 修改为一个落
+  // 在 [start, limit) 之间的短字符串, 长度更短但是
+  // 值更大, 得到的 start 内容可以被
+  // 用于 (sstable 中) index block 中的数据项的 key, 
+  // 更短意味着更加节省空间. 
   //
-  // 如果 *start < limit, 则把 *start 改为一个落在 [start, limit) 之间的短字符串, 
-  // 最终的长度更短但是值逻辑变大的 start 内容会被用于 index block 中的数据项的 key. 
-  // 简单的 comparator 实现可以不修改 *start, 也就是说这个方法可以什么也不做保持 start 不变, 因为
-  // 这仍然满足限制条件 [start, limit), 左边是闭区间. 
+  // 简单的 Comparator 实现在覆盖该方法时也可以不修改 *start, 
+  // 也就是说这个方法可以什么也不做保持 start 不变, 因为
+  // 这仍然满足限制条件 [start, limit), 因为左闭右开区间. 
   //
-  // 注意, 该方法仅在设置 index block 非末尾 entry 的时候调用; 如果是末尾, 调用下面的 FindShortSuccessor. 
+  // 注意, 该方法仅在设置 index block 非末尾 entry 的时候调用; 
+  // 如果是末尾, 调用下面的 FindShortSuccessor. 
   // 具体原因见 table_format.md 中对 index entry key 的描述. 
   virtual void FindShortestSeparator(
       std::string* start,

@@ -118,7 +118,7 @@ Options SanitizeOptions(const std::string& dbname,
 }
 
 // 计算 table_cache_ 容量.
-// 从计算过程可以看出, 这个 cache 还是很大的, 几乎把磁盘上的 sorted tables 文件都在内存中保存了一份.
+// 从计算过程可以看出, 这个 cache 还是很大的, 几乎把磁盘上的 sorted string tables 文件都在内存中保存了一份.
 static int TableCacheSize(const Options& sanitized_options) {
   // Reserve ten files or so for other uses and give the rest to TableCache.
   return sanitized_options.max_open_files - kNumNonTableCacheFiles;
@@ -238,7 +238,7 @@ void DBImpl::DeleteObsoleteFiles() {
   }
 
   // Make a set of all of the live files
-  // 将当前全部 sorted table 文件添加到 live 集合中
+  // 将当前全部 sorted string table 文件添加到 live 集合中
   std::set<uint64_t> live = pending_outputs_;
   // 将全部存活 version 中维护的文件添加到 live 集合中
   versions_->AddLiveFiles(&live);
@@ -361,7 +361,7 @@ Status DBImpl::Recover(VersionEdit* edit, bool *save_manifest) {
   FileType type;
   std::vector<uint64_t> logs;
   // 遍历数据库目录下全部文件.
-  // 筛选出 sorted table 文件, 验证 version 包含的 level 架构图有效性;
+  // 筛选出 sorted string table 文件, 验证 version 包含的 level 架构图有效性;
   // 同时将全部 log 文件筛选换出来待下面解析成 memtable.
   for (size_t i = 0; i < filenames.size(); i++) {
     // 解析文件类型
@@ -386,7 +386,7 @@ Status DBImpl::Recover(VersionEdit* edit, bool *save_manifest) {
   // 将 log 文件列表按照文件名从旧到新排序, 逐个恢复.
   std::sort(logs.begin(), logs.end());
   for (size_t i = 0; i < logs.size(); i++) {
-    // 从旧到新逐个 log 文件恢复, 如果有 log 文件转换为 sorted table 文件(如大小到达阈值)落盘则
+    // 从旧到新逐个 log 文件恢复, 如果有 log 文件转换为 sorted string table 文件(如大小到达阈值)落盘则
     // 将 save_manifest 标记为 true, 表示需要写日志到 manifest 文件.
     s = RecoverLogFile(logs[i], (i == logs.size() - 1), save_manifest, edit,
                        &max_sequence);
@@ -408,7 +408,7 @@ Status DBImpl::Recover(VersionEdit* edit, bool *save_manifest) {
 }
 
 // 读取 log 文件并将其转为 memtable. 如果该 log 文件继续使用则将其对应 memtable 赋值到 mem_ 继续使用;
-// 否则将 log 文件对应 memtable 转换为 sorted table 文件写入磁盘, 同时标记 save_manifest 为 true,
+// 否则将 log 文件对应 memtable 转换为 sorted string table 文件写入磁盘, 同时标记 save_manifest 为 true,
 // 表示 level 架构变动需要记录文件变更到 manifest 文件.
 Status DBImpl::RecoverLogFile(uint64_t log_number, bool last_log,
                               bool* save_manifest, VersionEdit* edit,
@@ -486,7 +486,7 @@ Status DBImpl::RecoverLogFile(uint64_t log_number, bool last_log,
       *max_sequence = last_seq;
     }
 
-    // 如果 memtable 太大了, 将其转为 sorted table 文件写入磁盘, 
+    // 如果 memtable 太大了, 将其转为 sorted string table 文件写入磁盘, 
     // 同时将其对应的 table 对象放到 table_cache_ 缓存
     if (mem->ApproximateMemoryUsage() > options_.write_buffer_size) {
       compactions++;
@@ -531,7 +531,7 @@ Status DBImpl::RecoverLogFile(uint64_t log_number, bool last_log,
     }
   }
 
-  // log 文件没有被重用, 将其对应 memtable 转为 sorted table 文件写入磁盘
+  // log 文件没有被重用, 将其对应 memtable 转为 sorted string table 文件写入磁盘
   if (mem != nullptr) {
     // mem did not get reused; compact it.
     if (status.ok()) {
@@ -564,7 +564,7 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
   {
     // 构造 Table 文件的时候与 mutex_ 要守护的成员变量无关, 可以解除锁定
     mutex_.Unlock();
-    // 将 memtable 序列化为一个 sorted table 文件并写入磁盘, 文件大小会被保存到 meta 中.
+    // 将 memtable 序列化为一个 sorted string table 文件并写入磁盘, 文件大小会被保存到 meta 中.
     s = BuildTable(dbname_, env_, options_, table_cache_, iter, &meta);
     // 构造完毕, 重新获取锁, 诸如 pending_outputs_ 需要 mutex_ 来守护
     mutex_.Lock();
@@ -605,7 +605,7 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
   return s;
 }
 
-// 将内存中的 memtable 转换为 sorted table 文件并写入到磁盘中. 
+// 将内存中的 memtable 转换为 sorted string table 文件并写入到磁盘中. 
 // 当且仅当该方法执行成功后, 切换到一组新的 log-file/memetable 组合并且写一个新的描述符. 
 // 如果执行失败, 则将错误记录到 bg_error_. 
 void DBImpl::CompactMemTable() {
@@ -613,7 +613,7 @@ void DBImpl::CompactMemTable() {
   assert(imm_ != nullptr);
 
   // Save the contents of the memtable as a new Table
-  // 将内存中的 memtable 内容保存为 sorted table 文件.
+  // 将内存中的 memtable 内容保存为 sorted string table 文件.
   // 每次落盘就是对当前 level 架构版本的一次编辑.
   VersionEdit edit;
   // 获取当前 dbimpl 对应的最新 version
@@ -679,7 +679,7 @@ void DBImpl::CompactRange(const Slice* begin, const Slice* end) {
     }
   }
   // 因为当前在写 memtable 可能与目标键区间有交集, 所以
-  // 强制触发一次 memtable 压实(即将当前 memtable 文件转为 sorted table 文件并写入磁盘)
+  // 强制触发一次 memtable 压实(即将当前 memtable 文件转为 sorted string table 文件并写入磁盘)
   // 并生成新 log 文件和对应的 memtable
   TEST_CompactMemTable();  // TODO(sanjay): Skip if memtable does not overlap
   for (int level = 0; level < max_level_with_files; level++) {
@@ -726,7 +726,7 @@ void DBImpl::TEST_CompactRange(int level, const Slice* begin,
   }
 }
 
-// 强制触发一次 memtable 压实(即将当前 memtable 文件转为 sorted table 文件并写入磁盘)
+// 强制触发一次 memtable 压实(即将当前 memtable 文件转为 sorted string table 文件并写入磁盘)
 // 并生成新 log 文件和对应的 memtable
 Status DBImpl::TEST_CompactMemTable() {
   // nullptr batch means just wait for earlier writes to be done
@@ -1195,7 +1195,7 @@ static void CleanupIteratorState(void* arg1, void* arg2) {
 
 }  // anonymous namespace
 
-// 该方法负责按序将当前 memtable 以及全部 sorted table 文件对应的迭代器构造出来, 
+// 该方法负责按序将当前 memtable 以及全部 sorted string table 文件对应的迭代器构造出来, 
 // 然后将其组装成一个逻辑迭代器 MergingIterator. 然后就可以用该迭代器遍历整个数据库了.
 Iterator* DBImpl::NewInternalIterator(const ReadOptions& options,
                                       SequenceNumber* latest_snapshot,
@@ -1213,14 +1213,14 @@ Iterator* DBImpl::NewInternalIterator(const ReadOptions& options,
     list.push_back(imm_->NewIterator());
     imm_->Ref();
   }
-  // 将当前 version 维护的 level 架构中每个 sorted table 文件对应的迭代器追加到列表中
+  // 将当前 version 维护的 level 架构中每个 sorted string table 文件对应的迭代器追加到列表中
   versions_->current()->AddIterators(options, &list);
   // 将全部迭代器上面加一层抽象构成一个逻辑迭代器 MergingIterator
   Iterator* internal_iter =
       NewMergingIterator(&internal_comparator_, &list[0], list.size());
   versions_->current()->Ref();
 
-  // 由于当前 memtable/in-merging-memtable/各个 level 的 sorted tables 的迭代器都被用了,
+  // 由于当前 memtable/in-merging-memtable/各个 level 的 sorted string tables 的迭代器都被用了,
   // 所以它们各自引用计数要累加. 等到用完还要递减以释放不需要的内存.
   IterState* cleanup = new IterState(&mutex_, mem_, imm_, versions_->current());
   // 注册该逻辑迭代器对应的清理函数, 该迭代器析构时就会执行清理函数释释放资源.
@@ -1242,7 +1242,7 @@ int64_t DBImpl::TEST_MaxNextLevelOverlappingBytes() {
   return versions_->MaxNextLevelOverlappingBytes();
 }
 
-// 先查询当前在用的 memtable, 如果没有则查询正在转换为 sorted table 的 memtable 中寻找, 
+// 先查询当前在用的 memtable, 如果没有则查询正在转换为 sorted string table 的 memtable 中寻找, 
 // 如果没有则我们在磁盘上采用从底向上 level-by-level 的寻找目标 key. 
 // 由于 level 越低数据越新, 因此, 当我们在一个较低的 level 找到数据的时候, 不用在更高的 levels 找了.
 // 由于 level-0 文件之间可能存在重叠, 而且针对同一个 key, 后产生的文件数据更新所以先将包含 key 的文件找出来
@@ -1281,14 +1281,14 @@ Status DBImpl::Get(const ReadOptions& options,
     // First look in the memtable, then in the immutable memtable (if any).
     // 根据 user_key 和快照对应的序列号构造一个 internal_key
     LookupKey lkey(key, snapshot);
-    // 先查询内存中与当前 log 文件对应的 memtable, 查不到再逐 level 去 sorted table 文件查找
+    // 先查询内存中与当前 log 文件对应的 memtable, 查不到再逐 level 去 sorted string table 文件查找
     if (mem->Get(lkey, value, &s)) {
       // Done
       // 查不到再去待压实的 memtable 去查询
     } else if (imm != nullptr && imm->Get(lkey, value, &s)) {
       // Done
     } else {
-      // 还查不到就去访问 sorted table 文件去查询
+      // 还查不到就去访问 sorted string table 文件去查询
       s = current->Get(options, lkey, value, &stats);
       have_stat_update = true;
     }
@@ -1304,7 +1304,7 @@ Status DBImpl::Get(const ReadOptions& options,
   return s;
 }
 
-// 将内存 memtable 和磁盘 sorted table 文件全部数据结构串起来构造一个大一统迭代器, 可以遍历整个数据库.
+// 将内存 memtable 和磁盘 sorted string table 文件全部数据结构串起来构造一个大一统迭代器, 可以遍历整个数据库.
 // 具体由 leveldb::Iterator *leveldb::DBImpl::NewInternalIterator 负责完成.
 Iterator* DBImpl::NewIterator(const ReadOptions& options) {
   SequenceNumber latest_snapshot;
@@ -1745,7 +1745,7 @@ Status DB::Open(const Options& options, const std::string& dbname,
   // 下面的 Recover 自动处理这两种错误: create_if_missing, error_if_exists.
   // save_manifest 用于标识是否需要在 Recover 后写 manifest 文件.
   bool save_manifest = false;
-  // 读取 current 文件, manifest 文件, sorted table 文件和 log 文件恢复数据库.
+  // 读取 current 文件, manifest 文件, sorted string table 文件和 log 文件恢复数据库.
   // 如果要打开的数据库不存在, Recover 负责进行创建.
   Status s = impl->Recover(&edit, &save_manifest);
   // 如果打开成功且当前 memtable 为空则创建之及其对应的 log 文件

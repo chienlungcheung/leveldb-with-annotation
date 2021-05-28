@@ -20,17 +20,10 @@ namespace leveldb {
 
 class FilterPolicy;
 
-// A FilterBlockBuilder is used to construct all of the filters for a
-// particular Table.  It generates a single string which is stored as
-// a special block in the Table.
-//
-// The sequence of calls to FilterBlockBuilder must match the regexp:
-//      (StartBlock AddKey*)* Finish
-//
 // FilterBlockBuilder 用于构造 table 的全部 filters. 
 // 最后生成一个字符串保存在 Table 的一个 meta block 中. 
 //
-// 该类方法调用序列必须满足下面的正则表达式: 
+// 该类的方法调用序列必须满足下面的正则表达式: 
 //      (StartBlock AddKey*)* Finish
 // 最少调用一次 Finish, 而且 AddKey 和 Finish 之间不能插入 StartBlock 调用. 
 class FilterBlockBuilder {
@@ -45,15 +38,22 @@ class FilterBlockBuilder {
   void GenerateFilter();
 
   const FilterPolicy* policy_;
-  // 调用 Add 追加的每个 key 都会被同时追加到这个字符串中(用于后续构造过滤器使用)
-  std::string keys_;              // Flattened key contents
-  // 每个被 Add 的 key 在 keys 字符串中的索引
-  std::vector<size_t> start_;     // Starting index in keys_ of each key
-  // 目前为止计算出来的 filter 数据
-  std::string result_;            // Filter data computed so far
-  // 临时变量, 用于 policy_->CreateFilter()
-  std::vector<Slice> tmp_keys_;   // policy_->CreateFilter() argument 内容与 keys_ 一样不过是 Slice 类型, 专用于 policy_->CreateFilter()
-  std::vector<uint32_t> filter_offsets_; // 每个 filter 对应的在 filter block 中的偏移量
+  // 调用 AddKey() 时每个 key 都会被
+  // 追加到这个字符串中(用于后续构造 filter 使用)
+  std::string keys_;
+  // 与 keys_ 配套, 每个被 AddKey() 方法追加的 key 在 
+  // keys_ 中的起始索引.
+  std::vector<size_t> start_;
+  // 每个新计算出来的 filter 都是一个字符串, 
+  // 都会被追加到 result_ 中.
+  // filter block 保存的内容就是 result_.
+  std::string result_;
+  // 是 keys_ 的列表形式, 临时变量, 每个成员是 Slice 类型,
+  // 用于 policy_->CreateFilter() 生成构造器.
+  std::vector<Slice> tmp_keys_;   
+  // 与 result_ 配套, 保存每个 filter 在 result_ 
+  // 中的起始偏移量.
+  std::vector<uint32_t> filter_offsets_; 
 
   // No copying allowed
   FilterBlockBuilder(const FilterBlockBuilder&);

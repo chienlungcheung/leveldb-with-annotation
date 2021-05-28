@@ -94,7 +94,7 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
   }
   return s;
 }
-// 返回指定 sorted table 文件对应的迭代器, 具体为:
+// 返回指定 sorted string table 文件对应的迭代器, 具体为:
 // 从 table_cache_ 根据 file_number 查找其对应的 table 对象, 若查到则返回其对应迭代器;
 // 否则加载文件并生成对应的 table 对象放到 table_cache_ 然后返回新构造的 table 的 iterator. 
 // 如果 tableptr 非空, 设置 *tableptr 指向返回的 iterator 底下的 Table 对象. 
