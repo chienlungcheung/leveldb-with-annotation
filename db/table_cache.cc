@@ -59,7 +59,7 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
   // 文件号对应的 Table 文件对象不在 cache 中, 则在磁盘寻找该 Table 文件, 
   // 如果找到则创建其对应的 Table 对象并将其连同文件号保存到 cache 中. 
   if (*handle == nullptr) {
-    // 根据 dbname、file_number 还有一个隐含的后缀 .ldb , 构造一个 table 文件对应的文件名
+    // 根据 dbname、file_number 还有一个隐含的后缀 .ldb, 构造一个 table 文件对应的文件名
     std::string fname = TableFileName(dbname_, file_number);
     RandomAccessFile* file = nullptr;
     Table* table = nullptr;

@@ -237,10 +237,12 @@ class Version {
 };
 
 // 一个 DBImpl 由一组 Versions 构成. 
-// 最新的 version 叫做 "current", 较老的 versions 可能也会被保留以为活跃的迭代器提供一致性视图. 
+// 最新的 version 叫做 "current", 
+// 较老的 versions 可能也会被保留以为活跃的迭代器提供一致性视图. 
 // Version 跟踪全部 level 及其文件. 
 // 全部 versions 集合由 VersionSet 维护. 
-// Version, VersionSet 都是兼容线程的, 但是在访问的时候需要外部的同步设施. 
+// Version, VersionSet 都是兼容线程的, 
+// 但是在访问的时候需要外部的同步设施. 
 class VersionSet {
  public:
   VersionSet(const std::string& dbname,
@@ -296,10 +298,10 @@ class VersionSet {
   // 返回指定 level 全部文件的总大小
   int64_t NumLevelBytes(int level) const;
 
-    // Return the current version.
-    //
-    // 返回最新的 version
-    Version* current() const { return current_; }
+  // Return the current version.
+  //
+  // 返回最新的 version
+  Version* current() const { return current_; }
 
   // Return the last sequence number.
   //

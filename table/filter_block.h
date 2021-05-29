@@ -22,6 +22,11 @@ class FilterPolicy;
 
 // FilterBlockBuilder 用于构造 table 的全部 filters. 
 // 最后生成一个字符串保存在 Table 的一个 meta block 中. 
+// 
+// 它由 `<一系列 filters + filter-offset 数组 
+//  + filters 部分的结束偏移量(4 字节) 
+//  + base log 值(1 字节)>` 构成. 
+// 注意该 block 最后 5 字节内容是固定的, 这也是该部分的解析入口.
 //
 // 该类的方法调用序列必须满足下面的正则表达式: 
 //      (StartBlock AddKey*)* Finish

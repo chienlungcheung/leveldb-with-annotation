@@ -126,9 +126,15 @@ void TableBuilder::Add(const Slice& key, const Slice& value) {
     // 已经将写满的 data block flush 到文件了.
     assert(r->data_block.empty());
     // 为 pending index entry 选一个合适的 key.
-    // 下面这个函数调用结束, last_key 可能不变, 也可能长度更短但是值更大, 
+    // 下面这个函数调用结束, last_key 可能不变, 也可能长度更短(省空间)但是值更大, 
     // 但不会 >= 要追加的 key. 因为进入该方法之前关于两个参数
     // 已经有了一个约束: 第一个字符串肯定小于第二个字符串, 这个上面有断言保证了.
+    //
+    // 为何这么做? 因为在查询数据时, 是先在 data-index block 中定位包含该数据的
+    // 目标 data block, 然后再转入目标 data block 中进行查找. 第一个定位靠的
+    // 就是这里的 last_key, 它和 data block 对应的 handle 一起构成了 data block 
+    // 在 data-index block 中的数据项. 第一个定位主要过程就是在 data-index block 
+    // 上查找第一个大于等于要查询数据的数据项, 具体见 TwoLevelIterator::Seek().  
     r->options.comparator->FindShortestSeparator(&r->last_key, key);
     // 用于存储序列化后的 BlockHandle
     std::string handle_encoding;

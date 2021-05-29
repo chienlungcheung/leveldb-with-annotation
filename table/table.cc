@@ -56,7 +56,7 @@ Status Table::Open(const Options& options,
                    uint64_t size,
                    Table** table) {
   /**
-   * 1 先解析 table 文件结尾的 Footer, 它是 sstable 的入口.
+   * 1 解析 footer: 它是 sstable 的入口.
    */
   *table = nullptr;
   // 每个 table 文件末尾是一个固定长度的 footer
@@ -77,7 +77,8 @@ Status Table::Open(const Options& options,
   if (!s.ok()) return s;
 
   /**
-   * 2 根据已解析的 Footer, 解析出 index block(它保存了指向全部 data blocks 的索引) 
+   * 2 解析 data-index block:
+   * 根据已解析的 Footer, 解析出 index block(它保存了指向全部 data blocks 的索引) 
    * 存储到 index_block_contents.
    */
   BlockContents index_block_contents;
@@ -111,7 +112,8 @@ Status Table::Open(const Options& options,
     rep->filter = nullptr;
     *table = new Table(rep);
     /**
-     * 3 根据已解析的 Footer 所包含的 metaindex block 指针, 
+     * 3 解析 meta-index block 和 meta block:
+     * 根据已解析的 Footer 所包含的 metaindex block 指针, 
      * 解析出 metaindex block, 再基于此解析出 mate block 
      * 存储到 Table::rep_.
      */
@@ -119,6 +121,8 @@ Status Table::Open(const Options& options,
     // 它一般为布隆过滤器, 可以加速数据查询过程.
     (*table)->ReadMeta(footer);
   }
+
+  // 是的, 该方法没有解析 data blocks.
 
   return s;
 }
@@ -134,7 +138,8 @@ void Table::ReadMeta(const Footer& footer) {
   }
 
   /**
-   * 根据 Footer 保存的 metaindex BlockHandle 解析对应的 metaindex block 到 meta 中
+   * 根据 Footer 保存的 metaindex BlockHandle 
+   * 解析对应的 metaindex block 到 meta 中
    */
   ReadOptions opt;
   if (rep_->options.paranoid_checks) {
@@ -142,7 +147,7 @@ void Table::ReadMeta(const Footer& footer) {
     opt.verify_checksums = true; 
   }
   BlockContents contents;
-  // 根据 handle 读取 metaindex block (从 rep_ 到 contents)
+  // 1 根据 handle 读取 metaindex block (从 rep_ 到 contents)
   if (!ReadBlock(rep_->file, opt, footer.metaindex_handle(), &contents).ok()) {
     // 由于 filter block 不是必须的, 没有 filter 最多就是读得慢一些;
     // 所以出错也不再继续传播, 而是直接返回.
@@ -160,10 +165,11 @@ void Table::ReadMeta(const Footer& footer) {
   std::string key = "filter.";
   // filter-policy name 在调用方传进来的配置项中
   key.append(rep_->options.filter_policy->Name());
-  // 在 metaindex block 搜寻 key 对应的 entry
+  // 在 metaindex block 搜寻 key 对应的 meta block 的 handle
   iter->Seek(key); 
   if (iter->Valid() && iter->key() == Slice(key)) {
-    // 找到了, 则解析对应的 filter block, 解析出来的
+    // 2 找到了, 迭代器对应的 value 即为 meta block handle,
+    // 根据其解析对应的 filter block(就是 meta block), 解析出来的
     // 内容会放到 rep_ 中.
     ReadFilter(iter->value()); 
   }
@@ -220,12 +226,14 @@ static void ReleaseBlock(void* arg, void* h) {
   cache->Release(handle);
 }
 
-// Convert an index iterator value (i.e., an encoded BlockHandle)
-// into an iterator over the contents of the corresponding block.
-//
-// 把一个编码过的 BlockHandle(即 index_value 参数)
-// 转换为一个基于对应的 block 的迭代器. 
-// 参数 arg 为 table; 参数 index_value 为指向某个 block 的索引(BlockHandle).
+// 基于 data block 的 handle (即 index_value 参数) 
+// 定位并读取对应的 data block, 然后为该 data block 
+// 内容构造一个迭代器. 
+// 参数 arg 为 table; 
+// 参数 index_value 为指向某个 block 的索引(BlockHandle).
+// Table 包含一个 block-cache(一般为 LRU), 定位读取之前会先查
+// 该缓存, 不存在才去文件里读, 读出来的 block 会放到
+// 前面提到的缓存里.
 Iterator* Table::BlockReader(void* arg,
                              const ReadOptions& options,
                              const Slice& index_value) {
@@ -305,8 +313,11 @@ Iterator* Table::BlockReader(void* arg,
   return iter;
 }
 
-// 根据解析获得的 index block, 先构造一个 index block 数据项的 iterator, 
-// 然后在其基础上构造一个两级迭代器, 用于遍历全部 data blocks 的数据项. 
+// 先为 data-index block 数据项构造一个迭代器 index_iter, 
+// 然后基于 index_iter 查询时, 为其指向的具体 data block 
+// 构造一个迭代器 data_iter, 进而可以迭代该 data block 里
+// 的全部数据项.
+// 这样就构成了一个两级迭代器, 从而实现遍历全部 data blocks 的数据项. 
 Iterator* Table::NewIterator(const ReadOptions& options) const {
   return NewTwoLevelIterator(
       rep_->index_block->NewIterator(rep_->options.comparator),
@@ -315,29 +326,40 @@ Iterator* Table::NewIterator(const ReadOptions& options) const {
 
 // 在 table 中查找 k 对应的数据项. 
 // 如果 table 具有 filter, 则用 filter 找; 
-// 如果没有 filter 则去 data block 里面查找, 并且在找到后通过 saver 保存 key/value. 
+// 如果没有 filter 则去 data block 里面查找, 
+// 并且在找到后通过 saver 保存 key/value. 
+// 注意, 针对 data block 的读取和解析发生在这个方法里.
 Status Table::InternalGet(const ReadOptions& options, const Slice& k,
                           void* arg,
                           void (*saver)(void*, const Slice&, const Slice&)) {
   Status s;
-  // 获取指向 index block 数据项的 iterator
+  // 针对 data index block 构造 iterator
   Iterator* iiter = rep_->index_block->NewIterator(rep_->options.comparator);
-  // 在 index block 中寻找第一个 key 大于等于 k 的数据项
+  // 在 data index block 中寻找第一个大于等于 k 的数据项, 这个数据项
+  // 就是目标 data block 的 handle.
   iiter->Seek(k);
   if (iiter->Valid()) {
-    Slice handle_value = iiter->value(); // 取出对应的 data block 的 BlockHandle
+    // 取出对应的 data block 的 BlockHandle
+    Slice handle_value = iiter->value(); 
     FilterBlockReader* filter = rep_->filter;
     BlockHandle handle;
-    // 如果有 filter 找起来就快了
+    // 如果有 filter 找起来就快了, 如果确定
+    // 不存在就可以直接反悔了.
     if (filter != nullptr &&
         handle.DecodeFrom(&handle_value).ok() &&
         !filter->KeyMayMatch(handle.offset(), k)) {
-      // Not found 没在该 data block 对应的过滤器找到这个 key, 肯定不存在
-    } else { // 没有 filter 需要在 block 中先二分后线性查找
+      // 没在该 data block 对应的过滤器找到这个 key, 肯定不存在
+    } else { 
+      // 如果没有 filter, 或者在 filter 中查询时无法笃定
+      // key 不存在, 就需要在 block 中进行查找.
+      // 看到了没? Open() 方法没有解析任何 data block, 解析
+      // 是在这里进行的, 因为这里要查询数据了.
       Iterator* block_iter = BlockReader(this, options, iiter->value());
       block_iter->Seek(k);
       if (block_iter->Valid()) {
-        (*saver)(arg, block_iter->key(), block_iter->value()); // 将找到的 key/value 保存下来, 后面迭代器要被释放了
+        // 将找到的 key/value 保存到输出型参数 arg 中, 
+        // 因为后面会将迭代器释放掉.
+        (*saver)(arg, block_iter->key(), block_iter->value()); 
       }
       s = block_iter->status();
       delete block_iter;

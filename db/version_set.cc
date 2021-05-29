@@ -446,7 +446,8 @@ Status Version::Get(const ReadOptions& options,
   // levels.  Therefore we are guaranteed that if we find data
   // in an smaller level, later levels are irrelevant.
   // 我们采用从底向上 level-by-level 的寻找. 
-  // 由于 level 越低数据越新, 因此, 当我们在一个较低的 level 找到数据的时候, 不用在更高的 levels 找了. 
+  // 由于 level 越低数据越新, 因此, 当我们在一个较低的 level 
+  // 找到数据的时候, 不用在更高的 levels 找了. 
   std::vector<FileMetaData*> tmp;
   FileMetaData* tmp2;
   // 逐 level 查询
@@ -505,7 +506,8 @@ Status Version::Get(const ReadOptions& options,
       }
     }
 
-    // 遍历存在包含目标 key 的每一个文件(如果是在 level-0 找到的, 那可能存在多个文件; 如果是其它 level, 只会是一个)
+    // 遍历存在包含目标 key 的每一个文件(如果是在 level-0 找到的, 
+    // 那可能存在多个文件; 如果是其它 level, 只会是一个)
     for (uint32_t i = 0; i < num_files; ++i) {
       if (last_file_read != nullptr && stats->seek_file == nullptr) {
         // We have had more than one seek for this read.  Charge the 1st file.

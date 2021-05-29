@@ -51,6 +51,7 @@ void Footer::EncodeTo(std::string* dst) const {
 // 先解码最后 8 字节的魔数(按照小端模式), 
 // 然后一次解码两个 BlockHandle. 
 Status Footer::DecodeFrom(Slice* input) {
+  // 1 按照小端模式解析末尾 8 字节的魔数
   const char* magic_ptr = input->data() + kEncodedLength - 8;
   const uint32_t magic_lo = DecodeFixed32(magic_ptr);
   const uint32_t magic_hi = DecodeFixed32(magic_ptr + 4);
@@ -60,20 +61,28 @@ Status Footer::DecodeFrom(Slice* input) {
     return Status::Corruption("not an sstable (bad magic number)");
   }
 
+  // 2 解析 meta-index block 的 handle
+  // (包含 meta index block 起始偏移量及其长度)
   Status result = metaindex_handle_.DecodeFrom(input);
   if (result.ok()) {
+    // 3 解析 index block 的 handle
+    // (包含 index block 起始偏移量及其长度)
     result = index_handle_.DecodeFrom(input);
   }
-  if (result.ok()) { // 此时 input 包含的数据只有可能的 padding 0 了
-    // We skip over any leftover data (just padding for now) in "input"
+  if (result.ok()) { 
+    // 4 跳过 padding
+    // meta-index handle + data-index handle + padding + 魔数.
+    // 此时 input 包含的数据只剩下可能的 padding 0 了, 跳过.
+    // end 为 footer 尾部
     const char* end = magic_ptr + 8;
-    *input = Slice(end, input->data() + input->size() - end); // todo Slice 第二个参数为负数, 生成这样的对象的目的为何呢? 
+    // 第二个参数为值为 0. 生成下面这个 slice 后面没有使用. 
+    *input = Slice(end, input->data() + input->size() - end); 
   }
   return result;
 }
 
 // 从 file 去读 handle 指向的 block:
-// - 读取整个块, 包含数据+压缩类型+crc
+// - 读取整个块, 包含数据+压缩类型(1 字节)+crc(4 字节)
 // - 校验 crc: 重新计算 crc 并与保存 crc 比较
 // - 解析压缩类型, 根据压缩类型对数据进行解压缩
 // - 将 block 数据部分保存到 BlockContents 中
@@ -93,7 +102,7 @@ Status ReadBlock(RandomAccessFile* file,
    */
   // 要读取的 block 的大小
   size_t n = static_cast<size_t>(handle.size()); 
-  // 每个 block 后面跟着它的压缩类型 type (1 字节)和 crc (4 字节)
+  // 每个 block 后面紧跟着它的压缩类型 type (1 字节)和 crc (4 字节)
   char* buf = new char[n + kBlockTrailerSize]; 
   Slice contents;
   // handle.offset() 指向对应 block 在文件里的起始偏移量
@@ -108,10 +117,9 @@ Status ReadBlock(RandomAccessFile* file,
   }
 
   /**
-   * 校验 crc
+   * 校验 type 和 block 内容加在一起对应的 crc
    */
-  // Check the crc of the type and the block contents
-  const char* data = contents.data();    // Pointer to where Read put the data
+  const char* data = contents.data();
   if (options.verify_checksums) {
     // 读取 block 末尾的 crc(始于第 n+1 字节)
     const uint32_t crc = crc32c::Unmask(DecodeFixed32(data + n + 1));
@@ -132,9 +140,6 @@ Status ReadBlock(RandomAccessFile* file,
   switch (data[n]) {
     case kNoCompression:
       if (data != buf) {
-        // File implementation gave us pointer to some other data.
-        // Use it directly under the assumption that it will be live
-        // while the file is open.
         delete[] buf;
         result->data = Slice(data, n);
         result->heap_allocated = false;

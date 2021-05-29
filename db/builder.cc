@@ -83,7 +83,9 @@ Status BuildTable(const std::string& dbname,
 
     if (s.ok()) {
       // Verify that the table is usable
-      // 确保刚写入的文件对应的 table 对象处于 table_cache_ 中.
+      // 为刚写入的文件生成对应的 table 对象, 
+      // 并将该 table 对象放到 table_cache_ 中.
+      // 最后为该 table 对象构造一个两级迭代器.
       Iterator* it = table_cache->NewIterator(ReadOptions(),
                                               meta->number,
                                               meta->file_size);
