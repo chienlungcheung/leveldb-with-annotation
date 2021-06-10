@@ -73,14 +73,16 @@ std::string OldInfoLogFileName(const std::string& dbname) {
 }
 
 
-// Owned filenames have the form:
+// 每个 leveldb 数据库目录的文件结构如下:
 //    dbname/CURRENT
 //    dbname/LOCK
 //    dbname/LOG
 //    dbname/LOG.old
 //    dbname/MANIFEST-[0-9]+
 //    dbname/[0-9]+.(log|sst|ldb)
-// 解析 filename, 将其中数字部分存储到 number 中(若文件名非数字则为 0), 将文件类型保存到 type 中.
+// 解析 filename, 将其中数字部分存储到 number 中
+// (若文件名非数字则为 0), 将文件类型保存到 type 中.
+// 解析成功返回 true, 否则返回 false.
 bool ParseFileName(const std::string& filename,
                    uint64_t* number,
                    FileType* type) {

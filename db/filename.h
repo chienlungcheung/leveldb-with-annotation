@@ -73,9 +73,15 @@ std::string InfoLogFileName(const std::string& dbname);
 // Return the name of the old info log file for "dbname".
 std::string OldInfoLogFileName(const std::string& dbname);
 
-// If filename is a leveldb file, store the type of the file in *type.
-// The number encoded in the filename is stored in *number.  If the
-// filename was successfully parsed, returns true.  Else return false.
+// 每个 leveldb 数据库目录的文件结构如下:
+//    dbname/CURRENT
+//    dbname/LOCK
+//    dbname/LOG
+//    dbname/LOG.old
+//    dbname/MANIFEST-[0-9]+
+//    dbname/[0-9]+.(log|sst|ldb)
+// 解析 filename, 将其中数字部分存储到 number 中
+// (若文件名非数字则为 0), 将文件类型保存到 type 中.
 bool ParseFileName(const std::string& filename,
                    uint64_t* number,
                    FileType* type);

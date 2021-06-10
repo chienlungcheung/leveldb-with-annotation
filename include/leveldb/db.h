@@ -289,8 +289,9 @@ LEVELDB_EXPORT Status DestroyDB(const std::string& name,
 // Some data may be lost, so be careful when calling this function
 // on a database that contains important information.
 /**
- * 如果 DB 无法打开, 你可以调用该方法尝试复活尽量多的数据库内容. 修复操作可能导致部分数据丢失, 所以
- * 针对包含重要数据的数据库, 要谨慎调用该函数. 
+ * 如果 DB 无法打开, 你可以调用该方法尝试修复尽量多的数据库内容. 
+ * 修复操作可能导致部分数据丢失, 所以
+ * 针对包含重要信息的数据库, 调用该函数时要小心. 
  * @param dbname 要修复的数据库名称
  * @param options 修复时使用的配置参数
  * @return

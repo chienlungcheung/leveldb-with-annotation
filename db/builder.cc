@@ -15,7 +15,7 @@
 namespace leveldb {
 
 // 该方法用于将 memtable 序列化为 sorted string table 文件并写入磁盘,
-// 同时确保该文件对应的 table 对象会被放到 table_cache_.
+// 同时确保该文件对应的 table 对象会被放到 table_cache_ 以供查询.
 //
 // 从迭代器 *iter 指向的 memtable 构造一个 Table 文件, 
 // 新生成的 Table 文件将基于 meta->number 进行命名.
@@ -48,17 +48,19 @@ Status BuildTable(const std::string& dbname,
     TableBuilder* builder = new TableBuilder(options, file);
     // 获取要写入的 memtable 的最小 key 并保存到 meta->smallest
     meta->smallest.DecodeFrom(iter->key());
-    // 迭代 memtable, 将 <key, value> 写入到 TableBuilder, 并保存最大的 key 到 meta->largest
+    // 迭代 memtable, 将 <key, value> 写入到 TableBuilder, 
+    // 并保存最大的 key 到 meta->largest
     for (; iter->Valid(); iter->Next()) {
       Slice key = iter->key();
-      // 因为 memtable 基于 skiplist 是从小到大有序的, 所以最后访问的那个数据项的 key 必定是最大的
+      // 因为 memtable 基于 skiplist 是从小到大有序的, 
+      // 所以最后访问的那个数据项的 key 必定是最大的
       meta->largest.DecodeFrom(key);
       builder->Add(key, iter->value());
     }
 
-    // Finish and check for builder errors
     // 将 TableBuilder 中的数据按照 table 文件的格式写入到文件, 
-    // table 文件构成: data blocks, filter block, metaindex block, index block
+    // table 文件构成: 
+    // data blocks, filter block, metaindex block, index block, footer
     s = builder->Finish();
     if (s.ok()) {
       // 写成功, 将 table 文件大小保存到 meta->file_size
@@ -68,7 +70,6 @@ Status BuildTable(const std::string& dbname,
     // 不管是否构造成功都释放 TableBuilder
     delete builder;
 
-    // Finish and check for file errors
     if (s.ok()) {
       // 确保内容写入到磁盘中
       s = file->Sync();
@@ -82,10 +83,10 @@ Status BuildTable(const std::string& dbname,
     file = nullptr;
 
     if (s.ok()) {
-      // Verify that the table is usable
       // 为刚写入的文件生成对应的 table 对象, 
       // 并将该 table 对象放到 table_cache_ 中.
       // 最后为该 table 对象构造一个两级迭代器.
+      // 从而确保 table 可用.
       Iterator* it = table_cache->NewIterator(ReadOptions(),
                                               meta->number,
                                               meta->file_size);
@@ -94,7 +95,6 @@ Status BuildTable(const std::string& dbname,
     }
   }
 
-  // Check for input iterator errors
   // 检查输入迭代器的状态
   if (!iter->status().ok()) {
     s = iter->status();

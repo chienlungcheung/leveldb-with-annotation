@@ -40,6 +40,8 @@
 
 namespace leveldb {
 
+// Repairer 位于匿名命名空间, 不能直接使用, 
+// 只能通过 leveldb::RepairDB() 方法间接使用.
 namespace {
 
 class Repairer {
@@ -53,7 +55,7 @@ class Repairer {
         owns_info_log_(options_.info_log != options.info_log),
         owns_cache_(options_.block_cache != options.block_cache),
         next_file_number_(1) {
-    // TableCache can be small since we expect each table to be opened once.
+    // TableCache 可能很小, 因为我们预期每个 table 将只打开一次.
     table_cache_ = new TableCache(dbname_, options_, 10);
   }
 
@@ -113,8 +115,13 @@ class Repairer {
   std::vector<TableInfo> tables_;
   uint64_t next_file_number_;
 
+  // 遍历数据库目录获取文件列表, 修复时我们仅对三类文件感兴趣:
+  // - MANIFEST
+  // - LOG
+  // - SSTable
   Status FindFiles() {
     std::vector<std::string> filenames;
+    // 获取数据库目录下的文件列表
     Status status = env_->GetChildren(dbname_, &filenames);
     if (!status.ok()) {
       return status;
@@ -125,8 +132,13 @@ class Repairer {
 
     uint64_t number;
     FileType type;
+    // 遍历文件列表, 修复时我们仅对三类文件感兴趣:
+    // - MANIFEST
+    // - LOG
+    // - SSTable
     for (size_t i = 0; i < filenames.size(); i++) {
       if (ParseFileName(filenames[i], &number, &type)) {
+        // MANIFEST 文件加入列表
         if (type == kDescriptorFile) {
           manifests_.push_back(filenames[i]);
         } else {
@@ -134,8 +146,10 @@ class Repairer {
             next_file_number_ = number + 1;
           }
           if (type == kLogFile) {
+            // LOG 文件加入列表
             logs_.push_back(number);
           } else if (type == kTableFile) {
+            // SSTable 文件加入列表
             table_numbers_.push_back(number);
           } else {
             // Ignore other files
@@ -146,9 +160,13 @@ class Repairer {
     return status;
   }
 
+  // 读取每个 log 文件将其转换为 memtable, 然后
+  // 将 memtable 序列化为 sstable 文件.
   void ConvertLogFilesToTables() {
     for (size_t i = 0; i < logs_.size(); i++) {
+      // 拼接 log 文件名
       std::string logname = LogFileName(dbname_, logs_[i]);
+      
       Status status = ConvertLogToTable(logs_[i]);
       if (!status.ok()) {
         Log(options_.info_log, "Log #%llu: ignoring conversion error: %s",
@@ -159,11 +177,14 @@ class Repairer {
     }
   }
 
+  // 读取单个 log 文件, 将其转换为 memtable, 然后
+  // 将 memtable 转换为 sstable.
   Status ConvertLogToTable(uint64_t log) {
     struct LogReporter : public log::Reader::Reporter {
       Env* env;
       Logger* info_log;
       uint64_t lognum;
+      // 修复数据过程中遇到错误打印日志, 丢弃问题数据继续.
       virtual void Corruption(size_t bytes, const Status& s) {
         // We print error messages for corruption, but continue repairing.
         Log(info_log, "Log #%llu: dropping %d bytes; %s",
@@ -173,7 +194,7 @@ class Repairer {
       }
     };
 
-    // Open the log file
+    // 打开 log file
     std::string logname = LogFileName(dbname_, log);
     SequentialFile* lfile;
     Status status = env_->NewSequentialFile(logname, &lfile);
@@ -181,7 +202,7 @@ class Repairer {
       return status;
     }
 
-    // Create the log reader.
+    // 创建 log reader.
     LogReporter reporter;
     reporter.env = env_;
     reporter.info_log = options_.info_log;
@@ -193,7 +214,7 @@ class Repairer {
     log::Reader reader(lfile, &reporter, false/*do not checksum*/,
                        0/*initial_offset*/);
 
-    // Read all the records and add to a memtable
+    // 读取全部 records 并存入 memtable
     std::string scratch;
     Slice record;
     WriteBatch batch;
@@ -207,6 +228,7 @@ class Repairer {
         continue;
       }
       WriteBatchInternal::SetContents(&batch, record);
+      // 将读取的 record 插入到 memtable
       status = WriteBatchInternal::InsertInto(&batch, mem);
       if (status.ok()) {
         counter += WriteBatchInternal::Count(&batch);
@@ -224,6 +246,7 @@ class Repairer {
     FileMetaData meta;
     meta.number = next_file_number_++;
     Iterator* iter = mem->NewIterator();
+    // 将 memtable 转换为 sstable
     status = BuildTable(dbname_, env_, options_, table_cache_, iter, &meta);
     delete iter;
     mem->Unref();
@@ -431,6 +454,7 @@ class Repairer {
     return status;
   }
 
+  // 将文件归档(移动到另一个目录)
   void ArchiveFile(const std::string& fname) {
     // Move into another directory.  E.g., for
     //    dir/foo
