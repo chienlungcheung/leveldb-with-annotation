@@ -49,11 +49,12 @@ class LEVELDB_EXPORT Table {
 
   ~Table();
 
-  // Returns a new iterator over the table contents.
-  // The result of NewIterator() is initially invalid (caller must
-  // call one of the Seek methods on the iterator before using it).
-  //
-  // 返回一个基于该 table 内容的迭代器. 
+  // 返回一个基于该 table 内容的两级迭代器. 
+  // 先为 data-index block 数据项构造一个迭代器 index_iter, 
+  // 然后基于 index_iter 查询时, 为其指向的具体 data block 
+  // 构造一个迭代器 data_iter, 进而可以迭代该 data block 里
+  // 的全部数据项. 这样就构成了一个两级迭代器, 
+  // 从而实现遍历全部 data blocks 的数据项. 
   // 该方法返回的结果默认是无效的(在使用该迭代器之前, 
   // 调用者在使用前必须调用其中一个 Seek 方法来
   // 使迭代器生效.)

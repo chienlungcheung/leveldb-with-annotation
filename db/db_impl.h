@@ -132,8 +132,8 @@ class DBImpl : public DB {
   const bool owns_cache_;
   const std::string dbname_;
 
-  // table_cache_ provides its own synchronization
-  TableCache* const table_cache_; // 该成员内部具备自己的同步设施
+  // table_cache_ 提供了自己的同步设施
+  TableCache* const table_cache_; 
 
   // Lock over the persistent DB state.  Non-null iff successfully acquired.
   FileLock* db_lock_; // 针对 DB 状态的访问需要使用该锁进行同步

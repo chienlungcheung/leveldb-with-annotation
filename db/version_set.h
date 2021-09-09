@@ -90,6 +90,8 @@ class Version {
     FileMetaData* seek_file;
     int seek_file_level;
   };
+
+  // 在 DBImpl::Get() 中被调用.
   // 先查询当前在用的 memtable, 如果没有则查询正在转换为 sorted string table 的 memtable 中寻找, 
   // 如果没有则我们在磁盘上采用从底向上 level-by-level 的寻找目标 key. 
   // 由于 level 越低数据越新, 因此, 当我们在一个较低的 level 找到数据的时候, 不用在更高的 levels 找了.
@@ -429,6 +431,12 @@ class VersionSet {
   Env* const env_;
   const std::string dbname_;
   const Options* const options_;
+  // 每次用户进行查询操作的时候(DBImpl::Get())可能需要去查询
+  // 磁盘上的文件, 这就要求有个缓存功能来加速.
+  // 下面这个成员会缓存 sstable 文件对应的 Table 实例, 
+  // 用于加速用户的查询, 否则每次读文件解析
+  // 就很慢了. 目前在用的缓存策略是 LRU.
+  // 该变量实际值来自 DBImpl 实例, 具体见 VersionSet 构造方法.
   TableCache* const table_cache_;
   const InternalKeyComparator icmp_;
   uint64_t next_file_number_;

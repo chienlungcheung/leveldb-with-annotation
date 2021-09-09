@@ -24,78 +24,68 @@ Cache::~Cache() {
  */
 namespace {
 
-// LRU cache implementation
-//
-// Cache entries have an "in_cache" boolean indicating whether the cache has a
-// reference on the entry.  The only ways that this can become false without the
-// entry being passed to its "deleter" are via Erase(), via Insert() when
-// an element with a duplicate key is inserted, or on destruction of the cache.
-//
-// The cache keeps two linked lists of items in the cache.  All items in the
-// cache are in one list or the other, and never both.  Items still referenced
-// by clients but erased from the cache are in neither list.  The lists are:
-// - in-use:  contains the items currently referenced by clients, in no
-//   particular order.  (This list is used for invariant checking.  If we
-//   removed the check, elements that would otherwise be on this list could be
-//   left as disconnected singleton lists.)
-// - LRU:  contains the items not currently referenced by clients, in LRU order
-// Elements are moved between these lists by the Ref() and Unref() methods,
-// when they detect an element in the cache acquiring or losing its only
-// external reference.
 /**
  * 采用 LRU 算法实现的 cache. 
  *
- * cache 每一个数据项都包含一个布尔类型的 in_cache 变量用于指示该 cache 是否有一个指向数据项的引用. 
- * 除了将数据项传给它的 deleter 以外, 该变量变为 false 的方式为调用 Erase()、或者在 key 存在时又调用 Insert() 插入具有同样的 key 的映射、
- * 或者 cache 析构时. 
+ * cache 每一个数据项都包含一个布尔类型的 in_cache 变量
+ * 用于指示该 cache 是否有一个指向数据项的引用. 
+ * 除了将数据项传给它的 deleter 以外, 该变量变为 false 的方式为
+ * 调用 Erase()、或者在 key 存在时又调用 Insert() 
+ * 插入具有同样的 key 的映射、或者 cache 析构时. 
  *
- * cache 持有两个包含数据项的链表, 某个数据项若存在则只包含在其中某一个链表中, 被客户端引用但已经被 Erase() 的数据项不在任何一个链表中. 
+ * cache 包含两个链表, 某个数据项若存在
+ * 则只包含在其中某一个链表中, 被客户端引用但已经
+ * 被 Erase() 的数据项不在任何一个链表中. 
  *
- * 这两个链表的状态为: 
+ * 这两个链表为: 
  *
- * - in-use: 包含当前被客户端引用的全部数据项, 无序排列. (这个链表用于不变式检查. 如果我们移除了这个检查, 
+ * - in-use: 包含当前被客户端引用的全部数据项, 这个链表名字说明了一切, 
+ *   无序排列. (这个链表用于不变式检查. 如果我们移除了这个检查, 
  *   仍然存在于这个链表中的元素可以从该链表剥离构成一个单例链表. )
- * - LRU: 包含当前已经不被客户端引用的全部数据项, 以 LRU 顺序排列. 
+ * - LRU: 包含当前未被客户端引用的全部数据项, 以 LRU 顺序排列. 
  *
- * 当 Ref() 和 Unref() 这两个方法检测到 cache 中某个元素获取到或者丢失了它的外部引用的时候, 可以在这些链表中对该数据项进行移动. 
+ * 通过 Ref() 和 Unref() 方法, 数据项可以在上面两个链表之间移动. 
  */
 
-// An entry is a variable length heap-allocated structure.  Entries
-// are kept in a circular doubly linked list ordered by access time.
 /*
- * 定义 cache 中存储的数据项结构, 一个数据项是一个变长的基于堆内存的数据结构. 
+ * cache 中每个数据项是一个基于堆内存的变长数据结构. 
  *
  * 全部数据项按照访问时间被保存在一个双向循环链表里. 
  */
 struct LRUHandle {
   void* value;
   void (*deleter)(const Slice&, void* value);
-  LRUHandle* next_hash; // 用于在哈希表中指向与自己同一个桶中的后续元素
+  // 用于在哈希表中指向与自己同一个桶中的后续元素
+  LRUHandle* next_hash; 
   LRUHandle* next;
   LRUHandle* prev;
-  size_t charge;      // TODO(opt): Only allow uint32_t?
+  // TODO(可选): 当前 charge 大小只允许 uint32_t
+  size_t charge;      
   size_t key_length;
-  bool in_cache;      // Whether entry is in the cache. 指示该数据项是否还在 cache 中. 
-  uint32_t refs;      // References, including cache reference, if present. 该数据项引用数. 
-  uint32_t hash;      // Hash of key(); used for fast sharding and comparisons key() 返回值的哈希值, 用于快速分片和比较. 
-  char key_data[1];   // Beginning of key key 的起始字符, 注意这个地方有个 trick, 就是因为 key 本来是变长的, 所以这里需要将 key_data 作为本数据结构最后一个元素, 方便根据实际情况延伸. 
+  // 指示该数据项是否还在 cache 中. 
+  bool in_cache;      
+  // 引用计数, 包含客户端引用数以及 cache 对该数据项引用数(1). 
+  uint32_t refs;      
+  // 基于 key 的 hash, 用于 sharding 和比较. 
+  uint32_t hash;      
+  // key 的起始字符, 注意这个地方有个 trick, 
+  // 因为 key 本来是变长的, 所以这里需要
+  // 将 key_data 作为本数据结构最后一个元素, 
+  // 方便构造时根据 key 实际大小延伸. 
+  char key_data[1];   
 
   Slice key() const {
-    // next_ is only equal to this if the LRU handle is the list head of an
-    // empty list. List heads never have meaningful keys.
-    assert(next != this); // 注意, 数据项所在循环链表的 head 不保存任何数据项, 如果 next == this 表示为只包含 head 的空链表. 
+    // 仅当当前 LRUHandle 作为一个空列表的 dummy head 时, 下面的
+    // 断言才不成立. dummy head 不保存任何数据.
+    assert(next != this); 
 
     return Slice(key_data, key_length);
   }
 };
 
-// We provide our own simple hash table since it removes a whole bunch
-// of porting hacks and is also faster than some of the built-in hash
-// table implementations in some of the compiler/runtime combinations
-// we have tested.  E.g., readrandom speeds up by ~5% over the g++
-// 4.4.3's builtin hashtable.
 /**
- * 我们自己实现了一个简单的哈希表, 因为它移除了全部跟可移植性相关的处理, 而且通过测试发现它比很多编译器或运行时内置的哈希表实现更快, 
+ * 我们自己实现了一个简单的哈希表, 因为它移除了全部跟可移植性相关的处理, 
+ * 而且通过测试发现它比很多编译器或运行时内置的哈希表实现更快, 
  * 比如, 随机读比 g++ 4.4.3 版本的内置 hashtable 快了大约 5%.
  *
  * 该哈希表基于拉链法实现, 哈希表包含一组桶, 每个桶包含一个链表用于处理哈希冲突. 
@@ -120,7 +110,8 @@ class HandleTable {
   /**
    * 将某个数据项插入到哈希表中
    * @param h 指向待插入数据项的指针
-   * @return 如果哈希表已经存在与 h 所指数据项相同的 key 和 hash 的 old, 则用 h 指向是的数据项替换 old, 返回 old; 
+   * @return 如果哈希表已经存在与 h 所指数据项相同的 key 和 hash 的 old, 
+   * 则用 h 指向是的数据项替换 old, 返回 old; 
    *        如果不存在, 则插入 h 返回 nullptr. 
    */
   LRUHandle* Insert(LRUHandle* h) {
@@ -214,27 +205,30 @@ class HandleTable {
   }
 };
 
-// A single shard of sharded cache.
 /**
- * 定义了 sharded cache 的 shard, 下面会定义 ShardedLRUCache. 
+ * 定义了 ShardedLRUCache(随后定义) 的一个 shard, 
+ * 注意该类未继承 Cache.
  *
- * 注意包括两个循环链表, 一个是 in_use_ 链表, 一个是 lru_ 链表, 同时还有一个用于快速查询数据项是否存在的哈希表. 
- * 前者 in_use_ 存的是在用的数据项, lru_ 存的是可以淘汰以节省空间也可以重新提升到 in_use_ 中的数据项, 
- * 哈希表存储了出现在 in_use_ 和 lru_ 中的全部数据项(用于快速判断某个数据项是否在 LRUCache 中). 
+ * 注意包括两个循环链表, 一个是 in_use_ 链表, 
+ * 一个是 lru_ 链表, 同时还有一个用于快速查询数据项是否存在的哈希表. 
+ * in_use_ 存的是在用的数据项, lru_ 存的是可以淘汰
+ * (以节省空间)也可以重新提升到 in_use_ 中的数据项, 
+ * 哈希表存储了出现在 in_use_ 和 lru_ 中的全部数据项
+ * (用于快速判断某个数据项是否在 LRUCache 中). 
  */
 class LRUCache {
  public:
   LRUCache();
   ~LRUCache();
 
-  // Separate from constructor so caller can easily make an array of LRUCache
+  // 讲容量设置从构造函数剥离以方便调用方构建 LRUCache 数组时候
+  // 挨个设置容量.
   void SetCapacity(size_t capacity) { capacity_ = capacity; }
 
-  // Like Cache methods, but with an extra "hash" parameter.
   /**
-   * 该方法线程安全, 因为同时可能由其它线程进行影响该 shard 状态的操作. 
+   * 该方法类似 Cache::Insert() 不过多了一个 hash 参数.
+   * 该方法线程安全, 可以同时由多个线程向同一个 shard 中插入.
    *
-   * 插入一个数据项, 类似于 Cache 类的方法, 但是多了一个额外的 hash 参数. 
    * @param key 要插入的数据项的 key
    * @param hash 要插入的数据项的 hash
    * @param value 要插入的数据项的 value
@@ -259,37 +253,38 @@ class LRUCache {
   }
 
  private:
-  // 下面 5 个私有方法都要修改本 shard 的状态, 所以需要进行同步, 虽然这几个方法内部没有采用同步设施, 但是调用它们的方法都进行了恰当的同步. 
+  // 下面 5 个私有方法都要修改本 shard 的状态, 所以需要进行同步. 
+  // 虽然这几个方法内部没有采用同步设施, 但是调用它们的方法都进行了恰当的同步. 
   void LRU_Remove(LRUHandle* e);
   void LRU_Append(LRUHandle*list, LRUHandle* e);
   void Ref(LRUHandle* e);
   void Unref(LRUHandle* e);
   bool FinishErase(LRUHandle* e) EXCLUSIVE_LOCKS_REQUIRED(mutex_);
 
-  // Initialized before use.
-  size_t capacity_; // 该 shard 的容量, 可以通过 SetCapacity 进行动态调整
+  // shard 的容量, 通过 SetCapacity 进行设置.
+  size_t capacity_; 
 
-  // mutex_ protects the following state. 针对下面的状态变量的访问将会被 mutex 守护
-  mutable port::Mutex mutex_; // 允许在 const 成员方法中修改该成员变量
-  size_t usage_ GUARDED_BY(mutex_); // shard 使用量
+  // 针对下面状态变量的访问将会被 mutex 守护
+  // 允许在 const 成员方法中修改该成员变量
+  mutable port::Mutex mutex_; 
+  // shard 使用量, 类似 size.
+  size_t usage_ GUARDED_BY(mutex_); 
 
-  // Dummy head of LRU list.
-  // lru.prev is newest entry, lru.next is oldest entry.
-  // Entries have refs==1 and in_cache==true.
-  // lru 链表的 dummy head(不保存任何数据项). 
-  // 这个链表的数据项的引用数肯定为 1, 而且 in_cache 标识肯定为 true, 
-  // 因为这个链表的数据项当前肯定实在 shard 中, 而且只被当前 shard 引用, 
-  // 他们要么即将被彻底淘汰要么等着被提升到 in_use 链表. 
+  // lru 链表的 dummy head(不保存任何数据项), lru.pre 时最新的数据项,
+  // lru.next 是最老的数据项.
+  // 该链表中的每个数据项同时满足 refs==1 且 in_cache==true,  
+  // 这个链表存储的都是未被外部使用的数据项(外部用的存在 in_use_ 中), 
+  // 它们要么即将被彻底淘汰要么等着被提升到 in_use_ 链表. 
   LRUHandle lru_ GUARDED_BY(mutex_);
 
-  // Dummy head of in-use list.
-  // Entries are in use by clients, and have refs >= 2 and in_cache==true.
   // in_use 链表的 dummy head(不保存任何数据项). 
   // in_use 链表存放被客户端使用的全部数据项, 
-  // 并且每个数据项的 refs >= 2(最少被一个客户端引用同时还被 shard 引用, 所以至少为 2) 且 in_cache == true. 
+  // 并且每个数据项的 refs >= 2(最少被一个客户端引用同时
+  // 还被 shard 引用, 所以至少为 2) 且 in_cache == true. 
   LRUHandle in_use_ GUARDED_BY(mutex_);
 
-  // 哈希表, 存放 in_use 链表和 lru 链表数据项的指针, 用于快速查询数据项是否在该 shard 中. 
+  // 哈希表, 存放 in_use 链表和 lru 链表数据项的指针, 
+  // 用于快速查询数据项是否在该 shard 中. 
   HandleTable table_ GUARDED_BY(mutex_);
 };
 
@@ -306,23 +301,27 @@ LRUCache::LRUCache()
  * 析构前要确保 in_use 链表为空了, 否则说明还有数据项仍被客户端持有. 
  */
 LRUCache::~LRUCache() {
-  assert(in_use_.next == &in_use_);  // Error if caller has an unreleased handle
+  // Error if caller has an unreleased handle
+  assert(in_use_.next == &in_use_);  
   for (LRUHandle* e = lru_.next; e != &lru_; ) {
     LRUHandle* next = e->next;
     assert(e->in_cache);
     e->in_cache = false;
-    assert(e->refs == 1);  // Invariant of lru_ list.
+    // Invariant of lru_ list.
+    assert(e->refs == 1);  
     Unref(e);
     e = next;
   }
 }
 
 /**
- * 负责将数据项引用数加 1, 如果有必要的话(即 e->refs == 1 && e->in_cache)将其从 lru 链表移动到 in_use 链表. 
+ * 负责将数据项引用数加 1, 如果有必要的话
+ * (即 e->refs == 1 && e->in_cache)将其从 lru 链表移动到 in_use 链表. 
  * @param e
  */
 void LRUCache::Ref(LRUHandle* e) {
-  if (e->refs == 1 && e->in_cache) {  // If on lru_ list, move to in_use_ list.
+  // If on lru_ list, move to in_use_ list.
+  if (e->refs == 1 && e->in_cache) {  
     LRU_Remove(e);
     LRU_Append(&in_use_, e);
   }
@@ -333,19 +332,21 @@ void LRUCache::Ref(LRUHandle* e) {
  * 将 e 指向的数据项的引用数减 1, 然后根据引用数决定释放释放其所占空间. 
  *
  * 如果 e 引用数变为 0, 则调用它对应的 deleter 释放之, 然后 free e 占用的内存; 
- * 如果 e 引用数变为 1(表示当前除了 cache 对象没有任何客户端引用它了) 且其 in_cache 状态为 true, 则将其从 in_use 链表移动到 lru 链表; 
+ * 如果 e 引用数变为 1(表示当前除了 cache 对象没有任何客户端引用它了) 
+ * 且其 in_cache 状态为 true, 则将其从 in_use 链表移动到 lru 链表; 
  * 其它情况什么也不做, 也不该发生. 
  * @param e
  */
 void LRUCache::Unref(LRUHandle* e) {
   assert(e->refs > 0);
   e->refs--;
-  if (e->refs == 0) {  // Deallocate.
+  if (e->refs == 0) {  
+    // 驱逐, 释放数据项占用的内存
     assert(!e->in_cache);
     (*e->deleter)(e->key(), e->value);
     free(e);
   } else if (e->in_cache && e->refs == 1) {
-    // No longer in use; move to lru_ list.
+    // 在缓存里(in_cache==true)但不被外部引用(refs==1), 移到 lru_ 列表.
     LRU_Remove(e);
     LRU_Append(&lru_, e);
   }
@@ -354,7 +355,8 @@ void LRUCache::Unref(LRUHandle* e) {
 /**
  * 将数据项 e 从当前所在链表移除. 
  *
- * 注意, 虽然该表以 LRU 开头, 但它的意思不是指操作 lru 表(也可能操作 in_use 表)而是指用 LRU 算法进行操作. 
+ * 注意, 虽然该表以 LRU 开头, 但它的意思不是指
+ * 操作 lru 表(也可能操作 in_use 表)而是指用 LRU 算法进行操作. 
  * @param e 要移除的数据项
  */
 void LRUCache::LRU_Remove(LRUHandle* e) {
@@ -366,12 +368,12 @@ void LRUCache::LRU_Remove(LRUHandle* e) {
  * 将 e 追加到 shard 的链表 list 中, 具体哪个表取决于具体参数. 
  * 追加后的效果为 e 变为该链表的首元素. 
  *
- * 注意, 虽然该表以 LRU 开头, 但它的意思不是指操作 lru 表(也可能操作 in_use 表)而是指用 LRU 算法进行操作. 
+ * 注意, 虽然该方法以 LRU 开头, 但它的意思不是指操作 lru 表
+ * (也可能操作 in_use 表)而是指用 LRU 算法进行操作. 
  * @param list 要追加到的链表 in_use 或者 lru
  * @param e 要追加的数据项
  */
 void LRUCache::LRU_Append(LRUHandle* list, LRUHandle* e) {
-  // Make "e" newest entry by inserting just before *list
   e->next = list;
   e->prev = list->prev;
   e->prev->next = e;
@@ -379,7 +381,8 @@ void LRUCache::LRU_Append(LRUHandle* list, LRUHandle* e) {
 }
 
 /**
- * 该方法线程安全, 因为同时可能由其它线程进行影响该 shard 状态的操作. 
+ * 该方法线程安全, 方便多线程查询命中时并发修改 refs 同时
+ * 防止查询时正在删除该数据项造成视图不一致. 
  *
  * 在该 shard 中查询具有给定 key 和 hash 的数据项
  * @param key 要查询的数据项的 key
@@ -388,9 +391,13 @@ void LRUCache::LRU_Append(LRUHandle* list, LRUHandle* e) {
  */
 Cache::Handle* LRUCache::Lookup(const Slice& key, uint32_t hash) {
   MutexLock l(&mutex_);
-  LRUHandle* e = table_.Lookup(key, hash); // table_ 是个哈希表, 存储了该 shard 全部数据项的指针, 查询快. 
+  // table_ 是个哈希表, 存储了该 shard 全部数据项的指针, 
+  // O(1) 复杂度. 
+  LRUHandle* e = table_.Lookup(key, hash); 
   if (e != nullptr) {
-    Ref(e); // 如果查到, 则将该数据项引用数加 1, 因为要 return 给外部调用者. 
+    // 如果查到, 则将该数据项引用数加 1, 
+    // 查询命中后续就要. 
+    Ref(e); 
   }
   return reinterpret_cast<Cache::Handle*>(e);
 }
@@ -398,7 +405,8 @@ Cache::Handle* LRUCache::Lookup(const Slice& key, uint32_t hash) {
 /**
  * 该方法线程安全, 因为同时可能由其它线程进行影响该 shard 状态的操作. 
  *
- * 释放数据项 handle, 如果该数据项不再使用, 则将其从 lru 链表删除(如果该数据项之前在 in_use 链表则将其移动到 lru 链表). 
+ * 释放数据项 handle, 如果该数据项不再使用, 则将其从 lru 
+ * 链表删除(如果该数据项之前在 in_use 链表则将其移动到 lru 链表). 
  * @param handle
  */
 void LRUCache::Release(Cache::Handle* handle) {
@@ -407,9 +415,9 @@ void LRUCache::Release(Cache::Handle* handle) {
 }
 
 /**
- * 该方法线程安全, 因为同时可能由其它线程进行影响该 shard 状态的操作. 
+ * 该方法类似 Cache::Insert() 不过多了一个 hash 参数.
+ * 该方法线程安全, 允许多个线程并发向同一个 shard 中插入.
  *
- * 插入一个数据项, 类似于 Cache 类的方法, 但是多了一个额外的 hash 参数. 
  * @param key 要插入的数据项的 key
  * @param hash 要插入的数据项的 hash
  * @param value 要插入的数据项的 value
@@ -422,8 +430,9 @@ Cache::Handle* LRUCache::Insert(
     void (*deleter)(const Slice& key, void* value)) {
   MutexLock l(&mutex_);
 
-  // 根据实际情况, 主要是 key 的长度, 来分配空间. 
-  // 减掉的 1 指的是 key_data[1] 所占的空间, 不减掉的话后面加上 key.size() 就多了一个字节. 
+  // 基于 LRUHandle 本身大小和 key 的实际长度来分配空间. 
+  // 减掉的 1 指的是 LRUHandle 初始化时为 key_data 预占的空间, 
+  // 不减掉的话后面加上 key.size() 就多了一个字节. 
   LRUHandle* e = reinterpret_cast<LRUHandle*>(
       malloc(sizeof(LRUHandle)-1 + key.size()));
   e->value = value;
@@ -432,32 +441,39 @@ Cache::Handle* LRUCache::Insert(
   e->key_length = key.size();
   e->hash = hash;
   e->in_cache = false;
-  e->refs = 1;  // for the returned handle. 因为 e 后面会被该方法返回, 所以将引用数加 1.
+  // 能存在于 cache 中的最小 ref 值, 
+  // 表示当前除了 cache 对象还没有任何外部引用.
+  e->refs = 1;  
   memcpy(e->key_data, key.data(), key.size());
 
   if (capacity_ > 0) {
-    // 本 shard 容量大于 0, 将 e 引用数加 1, 表示被本 shard 引用. 
-    e->refs++;  // for the cache's reference.
+    // 放入 in_use_ 列表就要增加引用.
+    e->refs++;
     // 该数据项被放到了 shard 中
     e->in_cache = true;
     // 将该数据项追加到 shard 的 in_use 链表
     LRU_Append(&in_use_, e);
     usage_ += charge;
-    // 如果 shard 中存在与 e 相同的 key 相同的 hash 的项, 则将其从 shard 彻底删除
+    // 将数据项插入到 hashtable, 这可以看做一个二级缓存.
+    // 如果 shard 中存在与 e "相同的 key 相同的 hash" 的项, 
+    // 则将 e 插入同时将老的数据项从 shard 彻底删除.
     FinishErase(table_.Insert(e));
-  } else {  // don't cache. (capacity_==0 is supported and turns off caching.)
-    // next is read by key() in an assert, so it must be initialized
-    // 如果容量 <= 0 不缓存该数据项, 此时 cache 被关闭了. 此处的赋值是防止 key() 方法的 assert 失败. 
+  } else {
+    // 如果 capacity_<= 0 意味着关闭了缓存功能. 
+    // 此处的赋值是防止 key() 方法的 assert 失败. 
     e->next = nullptr;
   }
-  // 如果本 shard 的使用量大于容量并且 lru 链表不为空, 则从 lru 链表里面淘汰数据项, lru 链表数据肯定不再使用了. 
+  // 如果本 shard 的使用量大于容量并且 lru 链表不为空, 
+  // 则从 lru 链表里面淘汰数据项, lru 链表数据当前肯定未被使用, 
+  // 直至使用量小于容量或者 lru 清空. 
   while (usage_ > capacity_ && lru_.next != &lru_) {
     LRUHandle* old = lru_.next;
     // lru 链表里面的数据项除了被该 shard 引用不会被任何客户端引用
     assert(old->refs == 1);
     // 从 shard 将 old 彻底删除
     bool erased = FinishErase(table_.Remove(old->key(), old->hash));
-    if (!erased) {  // to avoid unused variable when compiled NDEBUG
+    if (!erased) {  
+      // to avoid unused variable when compiled NDEBUG
       assert(erased);
     }
   }
@@ -466,12 +482,11 @@ Cache::Handle* LRUCache::Insert(
   return reinterpret_cast<Cache::Handle*>(e);
 }
 
-// If e != nullptr, finish removing *e from the cache; it has already been
-// removed from the hash table.  Return whether e != nullptr.
 /**
- * 从 shard 彻底移除 e. 
+ * 将 e 从 lru_ 链表移除. 
  *
- * 即执行完该方法后, 哈希表 table_、in_use 链表、lru 链表都不包含该数据项, 且它所占内存也被释放掉了. 
+ * 即执行完该方法后, 哈希表 table_、in_use 链表、lru 链表都不包含该数据项, 
+ * 且它所占内存也被释放掉了. 
  *
  * 注意, 调用该方法之前, e 一定是先从哈希表 table_ 移除过了. 
  * @param e 要从 shard 中移除的 e
@@ -479,19 +494,26 @@ Cache::Handle* LRUCache::Insert(
  */
 bool LRUCache::FinishErase(LRUHandle* e) {
   if (e != nullptr) {
-    assert(e->in_cache); // 移除前 e 肯定是在 cache 中
-    LRU_Remove(e); // 将 e 从当前所处的 shard 链表移除, 此时它一定在 lru 链表里面, 否则就出 bug 了. 
-    e->in_cache = false; // 标记 e 已从 cache 移除
-    usage_ -= e->charge; // cache 使用量因为移除 e 变小了
-    Unref(e); // 将 e 引用计数递减并将其所占内存释放
+    // 移除前 e 肯定是在 cache 中
+    assert(e->in_cache); 
+    // 将 e 从当前所处的 shard 链表移除, 
+    // 此时它一定在 lru 链表里面, 否则就出 bug 了. 
+    LRU_Remove(e); 
+    // 标记 e 已从 cache 移除
+    e->in_cache = false; 
+    // cache 使用量因为移除 e 变小了
+    usage_ -= e->charge; 
+    // 将 e 引用计数递减并将其所占内存释放
+    Unref(e); 
   }
   return e != nullptr;
 }
 
 /**
- * 该方法线程安全, 因为同时可能由其它线程进行影响该 shard 状态的操作. 
+ * 将 key 和 hash 对应的数据项从 shard 彻底移除(包括 hashtable 和 lru_ 链表, 
+ * 移除前提肯定是不再使用了, 所以不涉及 in_use_ 链表). 
  *
- * 将具有 key 和 hash 的数据项从 shard 彻底移除. 
+ * 该方法线程安全, 允许多个线程并发发起删除操作. 
  * @param key 要彻底移除的数据项的 key
  * @param hash 要彻底移除的数据项的 hash
  */
@@ -501,39 +523,49 @@ void LRUCache::Erase(const Slice& key, uint32_t hash) {
 }
 
 /**
+ * 驱逐全部不在使用中的数据项, 即清空 lru 链表释放空间, 
+ * lru 链表里的数据项当前肯定未被客户端引用. 
+ * 
  * 该方法线程安全, 因为同时可能由其它线程进行影响该 shard 状态的操作. 
- *
- * 清空 lru 链表释放空间, lru 链表里的数据项当前肯定未被客户端引用. 
+ * 
+ * 这个方法定义了但是未使用. 
  */
 void LRUCache::Prune() {
   MutexLock l(&mutex_);
   while (lru_.next != &lru_) {
     LRUHandle* e = lru_.next;
-    assert(e->refs == 1); // lru 链表中的数据项引用数肯定为 1, 因为这个链表的数据要么即将被彻底淘汰要么等着被提升到 in_use 链表. 
-    bool erased = FinishErase(table_.Remove(e->key(), e->hash)); // 先将该数据项从哈希表 table_ 删除, 以防查询时出现不一致行为
+    // lru 链表中的数据项引用数肯定为 1, 
+    // 因为这个链表的数据要么即将被彻底淘汰要么等着被提升到 in_use 链表. 
+    assert(e->refs == 1); 
+    // 先将该数据项从哈希表 table_ 删除, 以防查询时出现不一致行为
+    bool erased = FinishErase(table_.Remove(e->key(), e->hash)); 
     if (!erased) {  // to avoid unused variable when compiled NDEBUG
       assert(erased);
     }
   }
 }
 
+// 默认用于 sharding 的 bits 共 4 位, 即 16 个 shards.
 static const int kNumShardBits = 4;
-static const int kNumShards = 1 << kNumShardBits; // 默认 cache 具有 16 个 shards
+// 默认 cache 具有 16 个 shards
+static const int kNumShards = 1 << kNumShardBits; 
 
 /**
- * 一个基于 LRU 算法的并且支持 shard 的 Cache 的具体实现
+ * 一个基于 LRU 算法并且支持 sharding 的 Cache 实现.
+ * Sharding 一般就两种, 基于 hash 的或者基于 range 的, 
+ * 这里用的是基于 hash 的.
  */
 class ShardedLRUCache : public Cache {
  private:
-  // shard 数组, 每个 shard 就是一个 LRUCache
+  // sharding 分组, 每个 shard 就是一个 LRUCache.
   LRUCache shard_[kNumShards];
-  // 在生成新 id 时用于同步
+  // 用于实现互斥地生成 ID.
   port::Mutex id_mutex_;
   // 最新的 id
   uint64_t last_id_;
 
   /**
-   * 使用数据项的 key 计算数据项的 hash
+   * 基于 key 计算用于 sharding 的 hash
    * @param s
    * @return
    */
@@ -542,7 +574,7 @@ class ShardedLRUCache : public Cache {
   }
 
   /**
-   * 根据数据项的 hash 计算该数据项应该存放的 shard
+   * sharding 操作, 基于 hash 确定所属的 shard.
    * @param hash
    * @return
    */
@@ -558,10 +590,11 @@ class ShardedLRUCache : public Cache {
   explicit ShardedLRUCache(size_t capacity)
       : last_id_(0) {
     // 令 capacity + (kNumShards - 1) 可以确保各个 shards 总容量不会小于预期值. 
-    // 比如, capacity 为 10,  kNumShards 为 3, 如果不做任何处理, 那么每个 shard 分到 3, 那各个 shards 总容量只有 9, 小于我们预期; 
+    // 比如, capacity 为 10,  kNumShards 为 3, 如果不做任何处理, 
+    // 那么每个 shard 分到 3, 那各个 shards 总容量只有 9, 小于我们预期; 
     // 但是如果先加上 (3-1) 再分配, 则每个 shard 容量为 4, 总容量为 12.
-    // 加上 (kNumShards - 1) 可以确保原本 capacity / kNumShards 的余数可以分到一个单独的 shard, 
-    // 即实现 capacity / kNumShards 向上取整的效果. 
+    // 加上 (kNumShards - 1) 可以确保原本 capacity / kNumShards 的余数
+    // 可以分到一个单独的 shard, 即实现 capacity / kNumShards 向上取整的效果. 
     const size_t per_shard = (capacity + (kNumShards - 1)) / kNumShards;
     for (int s = 0; s < kNumShards; s++) {
       shard_[s].SetCapacity(per_shard);
@@ -570,7 +603,9 @@ class ShardedLRUCache : public Cache {
   virtual ~ShardedLRUCache() { }
   virtual Handle* Insert(const Slice& key, void* value, size_t charge,
                          void (*deleter)(const Slice& key, void* value)) {
+    // 计算 hash
     const uint32_t hash = HashSlice(key);
+    // 基于 hash 做 sharding
     return shard_[Shard(hash)].Insert(key, hash, value, charge, deleter);
   }
   virtual Handle* Lookup(const Slice& key) {

@@ -118,7 +118,8 @@ Options SanitizeOptions(const std::string& dbname,
 }
 
 // 计算 table_cache_ 容量.
-// 从计算过程可以看出, 这个 cache 还是很大的, 几乎把磁盘上的 sorted string tables 文件都在内存中保存了一份.
+// 从计算过程可以看出, 这个 cache 还是很大的, 
+// 几乎把磁盘上的 sorted string tables 文件都在内存中保存了一份.
 static int TableCacheSize(const Options& sanitized_options) {
   // Reserve ten files or so for other uses and give the rest to TableCache.
   return sanitized_options.max_open_files - kNumNonTableCacheFiles;
@@ -564,7 +565,9 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
   {
     // 构造 Table 文件的时候与 mutex_ 要守护的成员变量无关, 可以解除锁定
     mutex_.Unlock();
-    // 将 memtable 序列化为一个 sorted string table 文件并写入磁盘, 文件大小会被保存到 meta 中.
+    // 将 memtable 序列化为一个 sorted string table 文件并写入磁盘, 
+    // 文件大小会被保存到 meta 中. 同时将 sstable 对应的 Table 实例放入
+    // table_cache_ 中.
     s = BuildTable(dbname_, env_, options_, table_cache_, iter, &meta);
     // 构造完毕, 重新获取锁, 诸如 pending_outputs_ 需要 mutex_ 来守护
     mutex_.Lock();

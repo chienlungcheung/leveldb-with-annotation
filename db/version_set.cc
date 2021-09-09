@@ -303,7 +303,8 @@ void Version::AddIterators(const ReadOptions& options,
   // 注意这里是按照从小到达顺序进行追加的, 这样虽然部分重叠, 但是整体有序.
   for (size_t i = 0; i < files_[0].size(); i++) {
     iters->push_back(
-        // 针对给定的 file_number(对应的文件长度也必须恰好是 file_size 字节数), 返回一个与其对应 table 的 iterator. 
+        // 针对给定的 file_number(对应的文件长度也必须恰好是 file_size 字节数), 
+        // 返回一个与其对应 table 的 iterator. 
         // 如果 tableptr 参数非空, 设置 *tableptr 指向返回的 iterator 底下的 Table 对象. 
         // 返回的 *tableptr 对象由 cache 所拥有, 所以用户不要删除它; 而且只要 iterator 还活着, 该对象就有效. 
         vset_->table_cache_->NewIterator(
@@ -341,7 +342,8 @@ struct Saver {
 };
 }
 
-// 如果 arg (其实是个 Saver)中保存的 key 与 ikey 相等, 且 ikey 对应的 tag 不表示删除, 则将
+// 如果 arg (其实是个 Saver)中保存的 key 与 ikey 相等, 
+// 且 ikey 对应的 tag 不表示删除, 则将
 // 与 ikey 对应的 value 保存到 arg 对应成员中. 
 static void SaveValue(void* arg, const Slice& ikey, const Slice& v) {
   Saver* s = reinterpret_cast<Saver*>(arg);
@@ -442,9 +444,6 @@ Status Version::Get(const ReadOptions& options,
   FileMetaData* last_file_read = nullptr;
   int last_file_read_level = -1;
 
-  // We can search level-by-level since entries never hop across
-  // levels.  Therefore we are guaranteed that if we find data
-  // in an smaller level, later levels are irrelevant.
   // 我们采用从底向上 level-by-level 的寻找. 
   // 由于 level 越低数据越新, 因此, 当我们在一个较低的 level 
   // 找到数据的时候, 不用在更高的 levels 找了. 
@@ -452,19 +451,21 @@ Status Version::Get(const ReadOptions& options,
   FileMetaData* tmp2;
   // 逐 level 查询
   for (int level = 0; level < config::kNumLevels; level++) {
-    size_t num_files = files_[level].size(); // 第 level 层文件总数
-    if (num_files == 0) continue; // 空 level, 跳过
+    // 第 level 层文件总数
+    size_t num_files = files_[level].size(); 
+    // 空 level, 跳过
+    if (num_files == 0) continue; 
 
-    // Get the list of files to search in this level
-    // 指针可以改, 但指针指向内容不能改, 避免下面误操作. 
-    // 而且还要注意, 这里利用 vector 底层存储连续的特点直接采用指针遍历 vector, 而不是采用 vector 内置迭代器方式进行. 
+    // 获取 level 层的文件列表.
+    // 注意下面这个指针类型, 指针可以改但指针指向内容不能改, 避免下面误操作. 
+    // 而且还要注意, 这里利用 vector 存储连续的特点直接
+    // 采用指针遍历 vector, 而不是采用 vector 内置迭代器方式进行. 
     FileMetaData* const* files = &files_[level][0];
+    // level-0 比较特殊, 因为它的文件之间可能互相重叠, 所以需要单独处理. 
+    // 找到全部与 user_key 有重叠的文件, 然后从最新到最旧顺序进行处理. 
     if (level == 0) {
-      // Level-0 files may overlap each other.  Find all files that
-      // overlap user_key and process them in order from newest to oldest.
-      // level-0 比较特殊, 因为它的文件之间可能互相重叠, 所以需要单独处理. 
-      // 找到全部与 user_key 有重叠的文件, 然后从最新到最旧顺序进行处理. 
-      tmp.reserve(num_files); // 已知存储上限, 预分配, 避免后续重分配消耗性能
+      // 已知存储上限, 预分配, 避免后续重分配消耗性能
+      tmp.reserve(num_files); 
       for (uint32_t i = 0; i < num_files; i++) {
         // 遍历 level-0 全部文件, 找出包含 user_key 的文件
         FileMetaData* f = files[i];
@@ -474,24 +475,27 @@ Status Version::Get(const ReadOptions& options,
           tmp.push_back(f);
         }
       }
-      // level-0 没有文件与 user_key 由重叠, 返回继续处理下一层
+      // level-0 没有文件与 user_key 有重叠, 返回继续处理下一层
       if (tmp.empty()) continue;
 
       // 按照 file number 对文件进行从最新到最旧排序.
-      // 排序的原因是 level-0 文件之间可能存在重叠, 针对相同 key 如果存在不同数据, 那么后加入的数据才是有效的.
+      // 排序的原因是 level-0 文件之间可能存在重叠, 针对相同 key 如果
+      // 存在不同数据, 那么后加入的数据才是有效的.
       std::sort(tmp.begin(), tmp.end(), NewestFirst);
       // 修改指向
       files = &tmp[0];
-      num_files = tmp.size(); // 重叠的文件总个数
+      // 重叠的文件总个数
+      num_files = tmp.size(); 
     } else {
-      // Binary search to find earliest index whose largest key >= ikey.
-      // 先找可能包含目标 key 的文件: 在该层采用二分查找定位那个满足最大 key >= ikey 的第一个文件的索引
+      // 先找可能包含目标 key 的文件: 
+      // 在该层采用二分查找定位那个满足最大 key >= ikey 的第一个文件的索引
       uint32_t index = FindFile(vset_->icmp_, files_[level], ikey);
-      if (index >= num_files) { // 没找到
+      // 没找到文件
+      if (index >= num_files) { 
         files = nullptr;
         num_files = 0;
       } else {
-        // 再在文件内确认目标 key 存在
+        // 找到文件了, 再在文件内确认目标 key 是否存在
         tmp2 = files[index];
         // 不在
         if (ucmp->Compare(user_key, tmp2->smallest.user_key()) < 0) {
@@ -506,7 +510,7 @@ Status Version::Get(const ReadOptions& options,
       }
     }
 
-    // 遍历存在包含目标 key 的每一个文件(如果是在 level-0 找到的, 
+    // 遍历可能包含目标 key 的每一个文件(如果是在 level-0 找到的, 
     // 那可能存在多个文件; 如果是其它 level, 只会是一个)
     for (uint32_t i = 0; i < num_files; ++i) {
       if (last_file_read != nullptr && stats->seek_file == nullptr) {
@@ -528,8 +532,10 @@ Status Version::Get(const ReadOptions& options,
       saver.ucmp = ucmp;
       saver.user_key = user_key;
       saver.value = value;
-      // f 对应的 table 文件可能已经在 cache 中了(不在的话读取后也会加入 cache), 
-      // 从该文件中查找有无 internal_key 为 ikey 的数据项, 如果找到, 则调用 SaveValue 将
+      // sstable 文件 f 对应的 table 文件可能已经在 cache 中了
+      // (不在的话读取后也会加入 cache), 
+      // 从该文件中查找有无 internal_key 为 ikey 的数据项, 
+      // 如果找到, 则调用 SaveValue 将
       // 对应的 value 保存到 saver 数据结构中. 
       s = vset_->table_cache_->Get(options, f->number, f->file_size,
                                    ikey, &saver, SaveValue);
@@ -539,7 +545,7 @@ Status Version::Get(const ReadOptions& options,
       switch (saver.state) {
         case kNotFound:
           // 未在该文件中找到, 继续查找下个文件
-          break;      // Keep searching in other files
+          break; 
         case kFound:
           // 找到了, 返回
           return s;
