@@ -142,7 +142,8 @@ class HandleTable {
     LRUHandle** ptr = FindPointer(key, hash);
     LRUHandle* result = *ptr;
     if (result != nullptr) {
-      *ptr = result->next_hash; // 将要删除的 result 同一个桶里的下一个数据项替换 result
+			// 将要删除的 result 同一个桶里的下一个数据项替换 result
+      *ptr = result->next_hash;
       --elems_;
     }
     return result;

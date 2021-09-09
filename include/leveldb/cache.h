@@ -27,7 +27,8 @@ namespace leveldb {
 class LEVELDB_EXPORT Cache;
 
 /**
- * 创建一个固定大小的基于 LRU 算法的 cache
+ * 创建一个固定大小的基于 LRU 算法的 cache.
+ * 这里的用法, 后来的 golang 写法跟这里类似, 不知道是不是 Google 家的传承.
  */
 LEVELDB_EXPORT Cache* NewLRUCache(size_t capacity);
 
