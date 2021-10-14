@@ -165,12 +165,16 @@ class HandleTable {
    * @param hash 要查找的数据项的 hash
    * @return 如果找到, 则返回对应数据项的指针的地址; 
    *        如果找不到, 要么返回桶首元素应存储到的位置(此时为空桶), 
-   *            要么返回桶最后一个元素的 next_hash 的地址(桶不为空但没找到, 注意不是 next_hash 保存的地址, 此时 next_hash 保存的 nullptr(见 insert 方法)). 
+   *            要么返回桶最后一个元素的 next_hash 的地址
+   *            (桶不为空但没找到, 注意不是 next_hash 保存的地址,
+   *            此时 next_hash 保存的 nullptr(见 insert 方法)).
    */
   LRUHandle** FindPointer(const Slice& key, uint32_t hash) {
-    LRUHandle** ptr = &list_[hash & (length_ - 1)]; // 通过取模获取目标桶首元素的指针的地址
+		// 通过取模获取目标桶首元素的指针的地址
+    LRUHandle** ptr = &list_[hash & (length_ - 1)];
+		// 在桶里根据 hash 和 key 寻找数据项, hash 比较好比较, 不相等再比较字符串
     while (*ptr != nullptr &&
-           ((*ptr)->hash != hash || key != (*ptr)->key())) { // 在桶里根据 hash 和 key 寻找数据项, hash 比较好比较, 不相等再比较字符串
+           ((*ptr)->hash != hash || key != (*ptr)->key())) {
       ptr = &(*ptr)->next_hash;
     }
     return ptr;
@@ -245,7 +249,7 @@ class LRUCache {
   void Erase(const Slice& key, uint32_t hash);
   void Prune();
   /**
-   * 返回该 shard 的使用量
+   * 返回该 shard 的内存使用量
    * @return
    */
   size_t TotalCharge() const {
@@ -464,10 +468,12 @@ Cache::Handle* LRUCache::Insert(
     // 此处的赋值是防止 key() 方法的 assert 失败. 
     e->next = nullptr;
   }
+	// 下面这个循环解释了 LRUCache 的 LRU 效果.
   // 如果本 shard 的使用量大于容量并且 lru 链表不为空, 
   // 则从 lru 链表里面淘汰数据项, lru 链表数据当前肯定未被使用, 
   // 直至使用量小于容量或者 lru 清空. 
   while (usage_ > capacity_ && lru_.next != &lru_) {
+		// 这很重要, lru_.next 是 least recently used 的元素
     LRUHandle* old = lru_.next;
     // lru 链表里面的数据项除了被该 shard 引用不会被任何客户端引用
     assert(old->refs == 1);
@@ -555,6 +561,19 @@ static const int kNumShards = 1 << kNumShardBits;
  * 一个基于 LRU 算法并且支持 sharding 的 Cache 实现.
  * Sharding 一般就两种, 基于 hash 的或者基于 range 的, 
  * 这里用的是基于 hash 的.
+ *
+ * 这里有个问题. 就是 ShardedLRUCache 为何要进行 sharding,
+ * 明明这个类的一个实例只存在于一个节点的内存里(这么说有点绕但为了尽可能严谨先这么表达了.
+ * 换个不严格的问法就是 leveld 非分布式, ShardedLRUCache 实例也只在一个机器上, 为啥还要搞成分片的?)?
+ * 文档和代码里没有说明, 但我觉得这个问题值得思考一下.
+ * Sharding 最明显的目的就是分摊压力到各个 shard,
+ * 要么是分摊存储压力(多节点, 每个节点不承担一部分存储),
+ * 要么是分摊计算压力(多节点, 每个节点承担一部分计算),
+ * 总之这个在分布式环境下比较容易理解.
+ * 这里如此设计目的我认为是后者, 即计算压力,
+ * 更明确地讲是避免针对 ShardedLRUCache 锁粒度过大导致访问变为串行.
+ * 每个 shard 持有各自的锁, 这样可以尽可能地实现并行处理.
+ * 这里的 sharding 实质上是实现了 Java 里的 Lock Striping.
  */
 class ShardedLRUCache : public Cache {
  private:
@@ -635,7 +654,7 @@ class ShardedLRUCache : public Cache {
     return ++(last_id_);
   }
   /**
-   * 用于清空每个 shard 的 lru 链表, 并释放该链表中每个数据项所占内存空间
+   * 用于清空每个 shard 的 lru 链表, 已节约内存使用.
    */
   virtual void Prune() {
     for (int s = 0; s < kNumShards; s++) {
@@ -643,7 +662,8 @@ class ShardedLRUCache : public Cache {
     }
   }
   /**
-   * 返回该 cache 全部 shards 的使用量之和
+   * 返回该 cache 全部 shards 的使用量之和.
+   * 主要用于供使用者刁永刚以估计自己应用的内存占用.
    * @return
    */
   virtual size_t TotalCharge() const {
