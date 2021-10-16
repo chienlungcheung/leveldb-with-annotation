@@ -374,7 +374,7 @@ Status DBImpl::Recover(VersionEdit* edit, bool *save_manifest) {
         logs.push_back(number);
     }
   }
-  // 若 versionset 中记录的文件多于从当前数据库目录中读取到的文件, 
+  // 若 versionset 中记录的文件多于从当前数据库目录中读取到的文件,
   // 则说明数据库目录有文件丢失, 数据库损坏.
   if (!expected.empty()) {
     char buf[50];
@@ -487,7 +487,7 @@ Status DBImpl::RecoverLogFile(uint64_t log_number, bool last_log,
       *max_sequence = last_seq;
     }
 
-    // 如果 memtable 太大了, 将其转为 sorted string table 文件写入磁盘, 
+    // 如果 memtable 太大了, 将其转为 sorted string table 文件写入磁盘,
     // 同时将其对应的 table 对象放到 table_cache_ 缓存
     if (mem->ApproximateMemoryUsage() > options_.write_buffer_size) {
       compactions++;
@@ -565,7 +565,7 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
   {
     // 构造 Table 文件的时候与 mutex_ 要守护的成员变量无关, 可以解除锁定
     mutex_.Unlock();
-    // 将 memtable 序列化为一个 sorted string table 文件并写入磁盘, 
+    // 将 memtable 序列化为一个 sorted string table 文件并写入磁盘,
     // 文件大小会被保存到 meta 中. 同时将 sstable 对应的 Table 实例放入
     // table_cache_ 中.
     s = BuildTable(dbname_, env_, options_, table_cache_, iter, &meta);
@@ -584,7 +584,7 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
 
   // Note that if file_size is zero, the file has been deleted and
   // should not be added to the manifest.
-  // 如果 file_size 等于 0, 则对应文件已经被删除了而且不应该加入到 manifest 中. 
+  // 如果 file_size 等于 0, 则对应文件已经被删除了而且不应该加入到 manifest 中.
   int level = 0;
   if (s.ok() && meta.file_size > 0) {
     // meta 相关成员信息在 BuildTable 时填充过了
@@ -637,7 +637,7 @@ void DBImpl::CompactMemTable() {
   // 用生成的 Table 替换不可变的 memtable
   if (s.ok()) {
     edit.SetPrevLogNumber(0);
-    // memetable 已经转换为 Table 写入磁盘了, 之前的 logs 都不需要了. 
+    // memetable 已经转换为 Table 写入磁盘了, 之前的 logs 都不需要了.
     edit.SetLogNumber(logfile_number_);  // Earlier logs no longer needed
     s = versions_->LogAndApply(&edit, &mutex_);
   }
@@ -659,34 +659,38 @@ void DBImpl::CompactMemTable() {
 /**
  * 将键范围 [*begin,*end] 对应的底层存储压实, 注意范围是左闭右闭. 
  *
- * 压实过程中, 已经被删除或者被覆盖过的数据会被丢弃, 同时会将数据重新安放以减少后续数据访问操作的成本. 
+ * 压实过程中, 已经被删除或者被覆盖过的数据会被丢弃,
+ * 同时会将数据重新安放以减少后续数据访问操作的成本.
  * 这个操作是为那些理解底层实现的用户准备的. 
  *
- * 如果 begin==nullptr, 则从第一个键开始; 如果 end==nullptr 则到最后一个键为止. 所以, 如果像下面这样做则意味着压紧整个数据库: 
- *
+ * 如果 begin==nullptr, 则从第一个键开始;
+ * 如果 end==nullptr 则到最后一个键为止.
+ * 所以, 如果像下面这样做则意味着压紧整个数据库:
  * db->CompactRange(nullptr, nullptr);
  * @param begin 起始键
  * @param end 截止键
  */
 void DBImpl::CompactRange(const Slice* begin, const Slice* end) {
   int max_level_with_files = 1;
-  {
+  // 下面这个局部作用域为了控制 l 的生命周期进而简化加锁和释放锁操作
+	{
     MutexLock l(&mutex_);
     Version* base = versions_->current();
-    for (int level = 1; level < config::kNumLevels; level++) {
-      // 检查每个 level, 确认其包含的键区间释放与目标键区间有交集.
+		// 检查每个 level, 确认其包含的键区间是否与要压实的目标键区间有交集.
+		for (int level = 1; level < config::kNumLevels; level++) {
       if (base->OverlapInLevel(level, begin, end)) {
         // 与目标键区间有交集的最高 level
         max_level_with_files = level;
       }
     }
   }
-  // 因为当前在写 memtable 可能与目标键区间有交集, 所以
-  // 强制触发一次 memtable 压实(即将当前 memtable 文件转为 sorted string table 文件并写入磁盘)
-  // 并生成新 log 文件和对应的 memtable
+  // 因为当前在写的 memtable 可能与目标键区间有交集, 所以
+  // 强制触发一次 memtable 压实
+	// (即将当前 memtable 文件转为 sstable 文件并写入磁盘)
+  // 并生成新 log 文件和对应的 memtable.
   TEST_CompactMemTable();  // TODO(sanjay): Skip if memtable does not overlap
+	// 针对与目标键区间有交集的各个 level 触发一次手动压实
   for (int level = 0; level < max_level_with_files; level++) {
-    // 针对与目标键区间有交集的各个 level 触发一次手动压实
     TEST_CompactRange(level, begin, end);
   }
 }
@@ -729,11 +733,10 @@ void DBImpl::TEST_CompactRange(int level, const Slice* begin,
   }
 }
 
-// 强制触发一次 memtable 压实(即将当前 memtable 文件转为 sorted string table 文件并写入磁盘)
+// 强制触发一次 memtable 压实(即将当前 memtable 文件转为 sstable 文件并写入磁盘)
 // 并生成新 log 文件和对应的 memtable
 Status DBImpl::TEST_CompactMemTable() {
-  // nullptr batch means just wait for earlier writes to be done
-  // 等待之前发生的用户写操作结束
+  // 第二个参数为 nullptr, 目的是等待之前发生的用户写操作结束
   Status s = Write(WriteOptions(), nullptr);
   if (s.ok()) {
     // Wait until the compaction completes
@@ -1258,7 +1261,7 @@ Status DBImpl::Get(const ReadOptions& options,
   MutexLock l(&mutex_);
   SequenceNumber snapshot;
   if (options.snapshot != nullptr) {
-    // 如果查询某个快照版本对应的 value(比如针对同样的 key 比如 hello 多次 Put 写入, 
+    // 如果查询某个快照版本对应的 value(比如针对同样的 key 比如 hello 多次 Put 写入,
     //  每次 Put 时对应序列号是不同的)
     snapshot =
         static_cast<const SnapshotImpl*>(options.snapshot)->sequence_number();
@@ -1355,47 +1358,54 @@ Status DBImpl::Delete(const WriteOptions& options, const Slice& key) {
 }
 
 Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
-  // 每个写操作会被封装为一个 Writer
-  Writer w(&mutex_);
+  // 每次批量写会被封装为一个 Writer
+  Writer w(&mutex_); // 注意这里并不执行上锁操作.
   w.batch = my_batch;
   w.sync = options.sync;
   w.done = false;
 
-  // 加锁保护下面的 writers_ 队列操作
+  // 上锁保护下面的 writers_ 队列操作, 注意这里用的锁
+	// 和上面创建 Writer 用的是一把锁.
   MutexLock l(&mutex_);
-  // 新构造的 writer 入队.
-  // 注意, 指针是内置类型, 当做为右值类型时支持 move 语义, 
+  // 新构造的 writer 追加到 writers_ 队尾.
+  // 注意, 指针是内置类型, 当作为右值类型时支持 move 语义,
   // 所以这里调用的就是 deque 的右值引用版本的 push_back
-  writers_.push_back(&w); 
-  // 当前 writer 工作没完成并且不是队首元素, 则当前有其它 writer 在写, 挂起当前 writer 等待条件成熟
-  while (!w.done && &w != writers_.front()) { 
-    // 当前 writer 所在线程进入等待状态, 
+  writers_.push_back(&w);
+  // 当前 writer 工作没完成并且不是队首元素, 换句话说, 其它线程先于当前线程
+	// 调用了 Write() 方法在执行批量更新, 则挂起当前线程.
+  while (!w.done && &w != writers_.front()) {
+    // 当前 writer 所在线程进入等待状态,
     // 这会导致上面 MutexLock 上的锁被释放掉,
     // 于是其它写线程得以有机会调用当前 Write() 方法.
     w.cv.Wait();
   }
-  // 当前 writer 如果被排在前面 writer 给合并写入了, 那么它的 done 就被标记为完成了.
-  if (w.done) { 
+  // 还没写怎么就 done 了呢? 原因是 Write() 方法支持 writer 合并,
+	// 如果当前 writer 如果被排在前面的 writer 给合并写入了, 那么它的 done 就会被标记.
+	// 这里的检查和上面 while 中的检查构成了一个 double check, 因为 while 和 if
+	// 之间有个时间窗口.
+  if (w.done) {
     return w.status;
   }
 
-  // May temporarily unlock and wait.
   // 确认是否为本次写操作分配新的 log 文件, 如果需要则分配.
   // 下面方法可能会临时释放锁并进入等待状态, 这会导致更多 writers
   // 入队, 方便后面写的时候做写入合并写入一大批数据.
+	// 如果用户调用 Write() 传入了一个空 batch, 表达的意思是强制分配
+	// log 文件.
   Status status = MakeRoomForWrite(my_batch == nullptr);
   uint64_t last_sequence = versions_->LastSequence();
   Writer* last_writer = &w;
-  if (status.ok() && my_batch != nullptr) {  // nullptr batch is for compactions
-    // 队首 writer 负责将队列前面若干 writers 的 batch 合并为一个. 
-    // 注意&重要, 被合并的 writers 不出队, 写 log 期间队首 writer 不变,
+	// nullptr batch 用于触发压实
+  if (status.ok() && my_batch != nullptr) {
+    // 队首 writer 负责将队列前面若干 writers 的 batch 合并为一个 group.
+    // 注意, writers 被合并但是不出队, 写 log 期间队首 writer 始终不变,
     // 这个能确保后续写 log 写 memtable 期间, 其它进入 Write() 方法
     // 的线程对应的 Writer 因为不可能是队首元素最深只能进入到 Write() 方法入口
     // 的 while() 循环并陷入等待状态, 而不会出现多个 writer 并发写的情况,
     // 从而确保了 log/memtable 相关操作的线程安全.
     // 执行这些操作需要持有锁, 确保不会同时发生多个针对相同数据的合并操作.
     WriteBatch* updates = BuildBatchGroup(&last_writer);
-    // 设置本批次第一个写操作的序列号, 然后根据操作个数更新全局写操作的序列号, 
+    // 设置本批次第一个写操作的序列号, 然后根据操作个数更新全局写操作的序列号,
     // 执行这些操作需要持有锁, 确保 sequence 被互斥访问.
     WriteBatchInternal::SetSequence(updates, last_sequence + 1);
     last_sequence += WriteBatchInternal::Count(updates);
@@ -1459,11 +1469,9 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
   return status;
 }
 
-// REQUIRES: Writer list must be non-empty
-// REQUIRES: First writer must have a non-null batch
-//
 // 当外部调用 db 写数据时, 该方法将队列前若干 writer 的 batch 合并到一起.
 // 返回合并后的结果 batch, 参数 last_writer 也作为输出参数, 包含了被合并的最后一个 writer 的指针.
+// 要求: Writer 队列不为空且对手元素的 batch 不为 nullptr.
 WriteBatch* DBImpl::BuildBatchGroup(Writer** last_writer) {
   mutex_.AssertHeld();
   assert(!writers_.empty());
@@ -1518,55 +1526,53 @@ WriteBatch* DBImpl::BuildBatchGroup(Writer** last_writer) {
   return result;
 }
 
-// REQUIRES: mutex_ is held
-// REQUIRES: this thread is currently at the front of the writer queue
-// 
-// 当外部调用 db 写数据时, 该方法被调用负责根据实际情况创建新的 log 文件, 
-// 同时将当前 memtable 赋值给 imm_ 等待被写盘.
+// 当外部调用 db 写数据时, 该方法被调用负责根据实际情况创建新的 log 文件
+// 以及对应的 memtable, 同时将当前 memtable 赋值给 imm_ 等待被写盘.
 // 
 // 调用该方法前提: 
 // - mutex_ 被当前线程持有
-// - 当前线程当前在 writer 队列的队首
+// - 当前线程当前在 writer_ 队列的队首
 Status DBImpl::MakeRoomForWrite(bool force) {
   mutex_.AssertHeld(); // 断言当前线程持有 mutex_
   assert(!writers_.empty()); // 断言 writer 队列不为空
   bool allow_delay = !force;
   Status s;
-  // 循环为了避免下面的 background_work_finished_signal_.Wait() 过程中发生 Spurious wakeup,
+  // 循环目的:
+	// 1. 为了避免下面的 background_work_finished_signal_.Wait() 过程中发生 Spurious wakeup,
   // 具体见 https://en.wikipedia.org/wiki/Spurious_wakeup
+	// 2. 如果开始创建新 log 条件不成熟, 等待一会再检查可能就成熟了.
+	// 满足创建条件后, 再次进入循环第三个条件可以确保循环退出.
   while (true) {
     if (!bg_error_.ok()) {
-      // Yield previous error
+      // 后台压实任务出错, 先不能分配新的, 防止丢数据(此时是偏执模式, 对数据安全性要求高).
       s = bg_error_;
       break;
     } else if (allow_delay &&
       versions_->NumLevelFiles(0) >= config::kL0_SlowdownWritesTrigger) {
-      // We are getting close to hitting a hard limit on the number of
-      // L0 files.  Rather than delaying a single write by several
-      // seconds when we hit the hard limit, start delaying each
-      // individual write by 1ms to reduce latency variance.  Also,
-      // this delay hands over some CPU to the compaction thread in
-      // case it is sharing the same core as the writer.
+			// 如果用户允许延迟写入且 L0 文件数接近达到硬上限,
+			// 为了避免在达到上限后将单个写入延迟数秒, 我们
+			// 在这将单个写操作延迟 1ms 以减小延迟的方差.
+			// 而且, 这里的延迟操作可以在压实和写操作共用一个 core 的
+			// 时候将 CPU 时间拱手让给压实线程.
       mutex_.Unlock();
       env_->SleepForMicroseconds(1000);
-      allow_delay = false;  // Do not delay a single write more than once
+			// 我们不重复推迟同一个写操作
+      allow_delay = false;
       mutex_.Lock();
     } else if (!force &&
                (mem_->ApproximateMemoryUsage() <= options_.write_buffer_size)) {
-      // There is room in current memtable
-      // 如果 log 文件还没写满 4MB, 则不分配新的 log 文件
+      // 如果非强制分配且当前 memtable 还没写满, 则不分配新的 log 文件
       break;
     } else if (imm_ != nullptr) {
-      // We have filled up the current memtable, but the previous
-      // one is still being compacted, so we wait.
+			// 当前 memtable 已经写满, 但是前一个 memtable 还在压实过程中, 等待压实完成.
       Log(options_.info_log, "Current memtable full; waiting...\n");
       background_work_finished_signal_.Wait();
     } else if (versions_->NumLevelFiles(0) >= config::kL0_StopWritesTrigger) {
-      // There are too many level-0 files.
+      // level-0 文件个数太多了, 等待压实完成.
       Log(options_.info_log, "Too many L0 files; waiting...\n");
       background_work_finished_signal_.Wait();
     } else {
-      // Attempt to switch to a new memtable and trigger compaction of old
+			// 尝试切换到新的 memtable, 同时触发一个针对老 memtable 的压实.
       assert(versions_->PrevLogNumber() == 0);
       uint64_t new_log_number = versions_->NewFileNumber();
       WritableFile* lfile = nullptr;
@@ -1591,6 +1597,7 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       // 创建一个与新 log 文件对应的 memtable
       mem_ = new MemTable(internal_comparator_);
       mem_->Ref();
+			// 创建新文件后将强制状态取消
       force = false; // Do not force another compaction if have room
       // 如果需要触发压实操作, 则进行压实. 由于上面设置了 imm_, 只要之前 mem_ 不为空则必触发压实.
       MaybeScheduleCompaction();
@@ -1754,7 +1761,7 @@ Status DB::Open(const Options& options, const std::string& dbname,
   // 如果打开成功且当前 memtable 为空则创建之及其对应的 log 文件
   if (s.ok() && impl->mem_ == nullptr) {
     // Create new log and a corresponding memtable.
-    // 创建 log 文件及其对应的 memtable. 
+    // 创建 log 文件及其对应的 memtable.
     // log 文件名就是一个数字, 由 VersionSet 负责维护.
     uint64_t new_log_number = impl->versions_->NewFileNumber();
     WritableFile* lfile;

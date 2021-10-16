@@ -13,7 +13,6 @@
 
 namespace leveldb {
 
-// Update Makefile if you change these
 /**
  * 如果修改了下面的两个值, 需要对应更新 Makefile. 
  */
@@ -29,9 +28,9 @@ class WriteBatch; // 通过所使用的 Handler 与 MemTable 联系了起来, �
 // A Snapshot is an immutable object and can therefore be safely
 // accessed from multiple threads without any external synchronization.
 /**
- * 抽象类, 对应某个 DB 特定的状态. 
+ * 对应某个 DB 特定的状态.
  *
- * 一个快照是不可变的, 因此可以不使用额外的同步实施而被多个线程安全地并发访问. 
+ * 快照是不可变的, 因此可以不使用额外的同步实施而被多个线程安全地并发访问.
  */
 class LEVELDB_EXPORT Snapshot {
  protected:
@@ -68,8 +67,8 @@ class LEVELDB_EXPORT DB {
   /**
    * 打开一个名为 name 的数据库. 
    *
-   * 打开成功, 会把一个指向基于堆内存的数据库指针存储到 *dbptr, 同时返回 OK; 如果打开失败, 
-   * 存储 nullptr 到 *dbptr 同时返回一个错误状态. 
+   * 打开成功, 会把一个指向基于堆内存的数据库指针存储到 *dbptr, 同时返回 OK;
+   * 如果打开失败, 存储 nullptr 到 *dbptr 同时返回一个错误状态.
    *
    * 调用者不再使用这个数据库时需要负责释放 *dbptr 指向的内存. 
    * 
@@ -89,9 +88,6 @@ class LEVELDB_EXPORT DB {
 
   virtual ~DB();
 
-  // Set the database entry for "key" to "value".  Returns OK on success,
-  // and a non-OK status on error.
-  // Note: consider setting options.sync = true.
   /**
    * 将 <key, value> 对写入数据库, 成功返回 OK, 失败返回错误状态. 
    * @param options 本次写操作相关的配置参数, 如果有需要可以将该参数中的 sync 置为 true, 不容易丢数据但更慢. 
@@ -116,11 +112,8 @@ class LEVELDB_EXPORT DB {
    */
   virtual Status Delete(const WriteOptions& options, const Slice& key) = 0;
 
-  // Apply the specified updates to the database.
-  // Returns OK on success, non-OK on failure.
-  // Note: consider setting options.sync = true.
   /**
-   * 对数据库进行批量更新写操作.
+   * 对数据库进行批量更新操作.
    *
    * 该方法线程安全, 内部自带同步. 
    *
