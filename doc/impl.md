@@ -1,5 +1,3 @@
-[TOC]
-
 ## Files(leveldb 中的各种文件)
 
 每个 leveldb 的实现类似于一个单独的 [Bigtable tablet (section 5.3)](http://research.google.com/archive/bigtable.html), 但是它的文件组织有点不同. 
