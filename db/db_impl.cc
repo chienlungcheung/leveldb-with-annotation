@@ -1412,12 +1412,10 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
     WriteBatchInternal::SetSequence(updates, last_sequence + 1);
     last_sequence += WriteBatchInternal::Count(updates);
 
-    // Add to log and apply to memtable.  We can release the lock
-    // during this phase since &w is currently responsible for logging
-    // and protects against concurrent loggers and concurrent writes
-    // into mem_.
 		// 将 updates 追加到 log 文件同时写入 memtable, 期间可以释放锁, 因为 &w 负责
-		// 当前日志记录, 可以避免 mem_ 被并发写入.
+		// 当前日志写入, 可以避免并发 loggers 和并发写操作到 mem_.
+		// 只要 &w 不出队, 后面的 writers 就没机会出循环, 也就到不了这里和它竞争
+		// 写入 log 文件或 memtable, 所以没有线程安全问题.
     {
       // 这里临时释放可以让其它 writer 趁机在 Write 方法入口处进入写入队列.
       mutex_.Unlock();
@@ -1425,6 +1423,7 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
       status = log_->AddRecord(WriteBatchInternal::Contents(updates));
       bool sync_error = false;
       if (status.ok() && options.sync) {
+				// 如果调用方要求同步写入, 这里要进行一次刷盘
         status = logfile_->Sync();
         if (!status.ok()) {
           sync_error = true;
