@@ -1,13 +1,6 @@
-[toc]
+[TOC]
+
 ## Files(leveldb 中的各种文件)
-
-The implementation of leveldb is similar in spirit to the representation of a
-single [Bigtable tablet (section 5.3)](http://research.google.com/archive/bigtable.html).
-However the organization of the files that make up the representation is
-somewhat different and is explained below.
-
-Each database is represented by a set of files stored in a directory. There are
-several different types of files as documented below:
 
 每个 leveldb 的实现类似于一个单独的 [Bigtable tablet (section 5.3)](http://research.google.com/archive/bigtable.html), 但是它的文件组织有点不同. 
 
@@ -15,40 +8,11 @@ several different types of files as documented below:
 
 ### Log files (日志文件)
 
-A log file (*.log) stores a sequence of recent updates. Each update is appended
-to the current log file. When the log file reaches a pre-determined size
-(approximately 4MB by default), it is converted to a sorted string table (see below)
-and a new log file is created for future updates.
-
-A copy of the current log file is kept in an in-memory structure (the
-`memtable`). This copy is consulted on every read so that read operations
-reflect all logged updates.
-
 一个 log 文件(*.log)保存着最近一系列更新操作, 它相当于 leveldb 的 WAL(write-ahead log). 每个更新操作都被追加到当前的 log 文件中. 当 log 文件大小达到一个预定义的大小时(默认大约 4MB), 这个 log 文件就会被转换为一个 sorted string table (见下文)然后一个新的 log 文件就会被创建以保存未来的更新操作. 
 
 当前 log 文件内容同时也会被记录到一个内存数据结构中(即 `memtable`). 这个结构加上全部 sorted string tables (*.ldb) 才是完整数据, 一起确保每个读操作都能查到当前最新. 
 
 ## sorted string tables
-
-A sorted string table (*.ldb) stores a sequence of entries sorted by key. Each entry is
-either a value for the key, or a deletion marker for the key. (Deletion markers
-are kept around to hide obsolete values present in older sorted string tables).
-
-The set of sorted string tables are organized into a sequence of levels. The sorted
-table generated from a log file is placed in a special **young** level (also
-called level-0). When the number of young files exceeds a certain threshold
-(currently four), all of the young files are merged together with all of the
-overlapping level-1 files to produce a sequence of new level-1 files (we create
-a new level-1 file for every 2MB of data.)
-
-Files in the young level may contain overlapping keys. However files in other
-levels have distinct non-overlapping key ranges. Consider level number L where
-L >= 1. When the combined size of files in level-L exceeds (10^L) MB (i.e., 10MB
-for level-1, 100MB for level-2, ...), one file in level-L, and all of the
-overlapping files in level-(L+1) are merged to form a set of new files for
-level-(L+1). These merges have the effect of gradually migrating new updates
-from the young level to the largest level using only bulk reads and writes
-(i.e., minimizing expensive seeks).
 
 sorted string table(*.ldb) 文件就是 leveldb 的数据库文件了. 每个 sorted string table 文件保存着按 key 排序的一系列数据项. 每个数据项要么是一个与某个 key 对应的 value, 要么是某个 key 的删除标记. (删除标记其它地方又叫墓碑消息, 用于声明时间线上在此之前的同名 key 对应的记录都失效了, 后台线程负责对这类记录进行压实, 即拷贝到另一个文件时物理删除这类记录.). 注意, leveldb 是一个 append 类型而非 MySQL 那种 in-place 修改的数据库.
 
@@ -58,44 +22,21 @@ young level 的文件之间可能存在键区间重叠, 但是其它每层 level
 
 ### Manifest
 
-A MANIFEST file lists the set of sorted string tables that make up each level, the
-corresponding key ranges, and other important metadata. A new MANIFEST file
-(with a new number embedded in the file name) is created whenever the database
-is reopened. The MANIFEST file is formatted as a log, and changes made to the
-serving state (as files are added or removed) are appended to this log.
-
 MANIFEST 文件可以看作 leveldb 存储元数据的地方. 它列出了每一个 level 及其包含的全部 sorted string table 文件, 每个 sorted string table 文件对应的键区间, 以及其它重要的元数据. 每当重新打开数据库的时候, 就会创建一个新的 MANIFEST 文件(文件名中嵌有一个新生成的数字). MANIFEST 文件被格式化成日志文件, 针对它所服务的数据的变更都会被追加到该文件后面. 比如每当某个 level 发生文件新增或者删除操作时, 就会有一条日志被追加到 MANIFEST 中. 
 
 ### Current
-
-CURRENT is a simple text file that contains the name of the latest MANIFEST
-file.
 
 CURRENT 文件是一个简单的文本文件. 由于每次重新打开数据库都会生成一个 MANIFEST 文件, 所以需要一个地方记录最新的 MANIFEST 文件是哪个, CURRENT 就干这个事情, 它相当于一个指针, 其内容即是当前最新的 MANIFEST 文件的名称. 
 
 ### Info logs
 
-Informational messages are printed to files named LOG and LOG.old.
-
 LOG 或者 LOG.old 文件是保存 leveldb 运行日志的地方.
 
 ### Others
 
-Other files used for miscellaneous purposes may also be present (LOCK, *.dbtmp).
-
 其它文件被用于比较零碎的目的, 现有的其它文件有 LOCK、*.dbtmp. 
 
 ## Level 0
-
-When the log file grows above a certain size (4MB by default):
-Create a brand new memtable and log file and direct future updates here.
-
-In the background:
-
-1. Write the contents of the previous memtable to an sstable.
-2. Discard the memtable.
-3. Delete the old log file and the old memtable.
-4. Add the new sstable to the young (level-0) level.
 
 当一个 log 文件大小超过某个值(默认 4MB): 
 
@@ -110,35 +51,6 @@ In the background:
 
 ## Compactions 压实
 
-When the size of level L exceeds its limit, we compact it in a background
-thread. The compaction picks a file from level L and all overlapping files from
-the next level L+1. Note that if a level-L file overlaps only part of a
-level-(L+1) file, the entire file at level-(L+1) is used as an input to the
-compaction and will be discarded after the compaction.  Aside: because level-0
-is special (files in it may overlap each other), we treat compactions from
-level-0 to level-1 specially: a level-0 compaction may pick more than one
-level-0 file in case some of these files overlap each other.
-
-A compaction merges the contents of the picked files to produce a sequence of
-level-(L+1) files. We switch to producing a new level-(L+1) file after the
-current output file has reached the target file size (2MB). We also switch to a
-new output file when the key range of the current output file has grown enough
-to overlap more than ten level-(L+2) files.  This last rule ensures that a later
-compaction of a level-(L+1) file will not pick up too much data from
-level-(L+2).
-
-The old files are discarded and the new files are added to the serving state.
-
-Compactions for a particular level rotate through the key space. In more detail,
-for each level L, we remember the ending key of the last compaction at level L.
-The next compaction for level L will pick the first file that starts after this
-key (wrapping around to the beginning of the key space if there is no such
-file).
-
-Compactions drop overwritten values. They also drop deletion markers if there
-are no higher numbered levels that contain a file whose range overlaps the
-current key.
-
 当 level-L 大小超过了上限, 具体来说就是 level-0 文件数超过 4 个, level-L(L>=1) 文件总大小好过 $10^L$MB, 就会触后台线程的压实操作. 压实过程会从 level-L(L>=1) 挑一个文件, 然后将 level-(L+1) 中与该文件键区间重叠的文件都找出来. 注意, 即使一个 level-L 文件仅仅与 level-(L+1) 重叠了一部分, 那么 level-(L+1) 的这个文件也会整个作为压实过程的输入, 等压实结束后该文件就会被丢弃. 另外, 因为 level-0 比较特殊(该层的文件之间可能相互重叠), 我们会把 level-0 到 level-1 的压实过程做特殊处理: 我们每次会从 level-0 选取相互重叠的全部文件, 而不是像其它 level 一样只选取一个文件, 然后将其合并为一个文件然后再和 level-1 与其重叠的文件进行合并. 
 
 一次压实会合并多个文件的内容从而生成一系列新的 level-(L+1) 文件, 生成一个新文件的条件有两个: 当前文件达到了 2MB 大小或者当前文件的键区间与超过 10 个 level-(L+2) 文件发生了重叠(还记得前面的 MANIFEST 文件吗? 它记录了每一个 level 的文件及其键区间). 第二个条件的目的在于避免后续对 level-(L+1) 文件进行压实时需要从 level-(L+2) 读取过多的数据. 
@@ -150,35 +62,6 @@ current key.
 压实会丢弃某个 key 对应的被覆盖过的 values(只保留时间线上最新的那个 value), 也会在没有更高的 level 包含该 key 的时候丢弃针对这个 key 的删除标记(level 越高数据越老, 所以如果某个 key 被在下层标记为删除, 在合并全部上层针对该 key 的操作之前该标记不能移除否则会被查询过程感知到老数据). 
 
 ### Timing 压实时间消耗
-
-Level-0 compactions will read up to four 1MB files from level-0, and at worst
-all the level-1 files (10MB). I.e., we will read 14MB and write 14MB.
-
-Other than the special level-0 compactions, we will pick one 2MB file from level
-L. In the worst case, this will overlap ~ 12 files from level L+1 (10 because
-level-(L+1) is ten times the size of level-L, and another two at the boundaries
-since the file ranges at level-L will usually not be aligned with the file
-ranges at level-L+1). The compaction will therefore read 26MB and write 26MB.
-Assuming a disk IO rate of 100MB/s (ballpark range for modern drives), the worst
-compaction cost will be approximately 0.5 second.
-
-If we throttle the background writing to something small, say 10% of the full
-100MB/s speed, a compaction may take up to 5 seconds. If the user is writing at
-10MB/s, we might build up lots of level-0 files (~50 to hold the 5*10MB). This
-may significantly increase the cost of reads due to the overhead of merging more
-files together on every read.
-
-Solution 1: To reduce this problem, we might want to increase the log switching
-threshold when the number of level-0 files is large. Though the downside is that
-the larger this threshold, the more memory we will need to hold the
-corresponding memtable.
-
-Solution 2: We might want to decrease write rate artificially when the number of
-level-0 files goes up.
-
-Solution 3: We work on reducing the cost of very wide merges. Perhaps most of
-the level-0 files will have their blocks sitting uncompressed in the cache and
-we will only need to worry about the O(N) complexity in the merging iterator.
 
 Level-0 压实将会从 level-0 读取 4 个 1MB 文件(log 文件说明部分提到当 log 文件增长到 4MB 就会被转成一个 sorted string table, 这里看应该是转成 4 个, 每个 1MB 大小. compaction 部分提到 level-0 文件个数达到 4 就触发 level-0 压实, 这么看应该是每次 log 达到 4MB 会触发 sorted string table 生成, 同时会触发压实.), 最坏情况下同时会把 level-1 全部 10MB 文件都读进来(即该层全部文件都和 level-0 有重叠). 这种情况下我们会读取 14MB 写入 14MB. 
 
@@ -194,23 +77,6 @@ Level-0 压实将会从 level-0 读取 4 个 1MB 文件(log 文件说明部分�
 
 ### Number of files 文件个数的影响
 
-Instead of always making 2MB files, we could make larger files for larger levels
-to reduce the total file count, though at the expense of more bursty
-compactions.  Alternatively, we could shard the set of files into multiple
-directories.
-
-An experiment on an ext3 filesystem on Feb 04, 2011 shows the following timings
-to do 100K file opens in directories with varying number of files:
-
-
-| Files in directory | Microseconds to open a file |
-|-------------------:|----------------------------:|
-|               1000 |                           9 |
-|              10000 |                          10 |
-|             100000 |                          16 |
-
-So maybe even the sharding is not necessary on modern filesystems?
-
 不再总是构造大小为 2MB 大小的文件, 我们可以为更高的 level 构造更大的文件以减少总的文件个数, 虽然这样会导致更加猝发式(发生时机突然, 而且量非常大)地压实操作. 或者, 我们可以将同一组文件分片到多个目录中. 
 
 2011 年 2 月 4 号, 我们在一个 ext3 文件系统上做了针对包含不同文件个数的目录打开十万次文件的时间消耗测试: 
@@ -225,13 +91,6 @@ So maybe even the sharding is not necessary on modern filesystems?
 
 ## Recovery 打开数据库时的恢复过程
 
-* Read CURRENT to find name of the latest committed MANIFEST
-* Read the named MANIFEST file
-* Clean up stale files
-* We could open all sstables here, but it is probably better to be lazy...
-* Convert log chunk to a new level-0 sstable
-* Start directing new writes to a new log file with recovered sequence#
-
 - 读取 CURRENT 文件找到最新的 MANIFEST 文件的名称
 - 读取该 MANIFEST 文件内容
 - 清理过期的文件
@@ -240,10 +99,5 @@ So maybe even the sharding is not necessary on modern filesystems?
 - 将接下来的要写的数据写入 log 文件
 
 ## Garbage collection of files
-
-`DeleteObsoleteFiles()` is called at the end of every compaction and at the end
-of recovery. It finds the names of all files in the database. It deletes all log
-files that are not the current log file. It deletes all table files that are not
-referenced from some level and are not the output of an active compaction.
 
 每次压实结束或者恢复结束 `DeleteObsoleteFiles()` 方法就会被调用. 该方法会找到数据库中的全部文件的名称. 它会删除全部的非当前 log 文件, 也会删除全部无效的 table 文件(这些 table 文件不再被任何 level 引用且不是某个正在进行的压实过程的输出文件). 
