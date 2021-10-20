@@ -1,4 +1,9 @@
 
+# 写在前面
+
+本项目是出于兴趣为 leveldb 写的传, 目标注释全部代码(注释就在该项目中), 同时输出一个博客系列(首篇博客点[这里](https://chienlungcheung.github.io/2020/09/11/leveldb-annotations-0-usage-and-examples/), 持续更新中.
+
+# 开始
 **LevelDB 是一个快速的键值存储程序库, 提供了字符串形式的 keys 到字符串形式的 values 的有序映射.**
 
 [![Build Status](https://travis-ci.org/google/leveldb.svg?branch=master)](https://travis-ci.org/google/leveldb)
@@ -41,38 +46,21 @@ sudo make install
 
 更多高级用法请请参照 CMake 文档和 `CMakeLists.txt`. 
 
-# Contributing to the leveldb Project
+# 为 leveldb 贡献代码
 
-The leveldb project welcomes contributions. leveldb's primary goal is to be
-a reliable and fast key/value store. Changes that are in line with the
-features/limitations outlined above, and meet the requirements below,
-will be considered.
+leveldb 欢迎大家贡献代码. leveldb 主要目标是成为一个可靠且高速的 key/value 存储. 任何涉及上面提到的特性和局限性, 同时满足下述要求的变更都会被考虑纳入. 
 
-Contribution requirements:
+贡献要求:
 
-1. **POSIX only**. We _generally_ will only accept changes that are both
-   compiled, and tested on a POSIX platform - usually Linux. Very small
-   changes will sometimes be accepted, but consider that more of an
-   exception than the rule.
+1. **POSIX only**. 通常只接受可以在 POSIX 平台(通常是 Linux)上编译和测试的变更. 可以破例但是只是极其意外的情况.
 
-2. **Stable API**. We strive very hard to maintain a stable API. Changes that
-   require changes for projects using leveldb _might_ be rejected without
-   sufficient benefit to the project.
+2. **Stable API**. 为了维持稳定的 API, 已经付出极大努力. 任何可能导致依赖 leveldb 的项目作出改变的变更在没有充分理由的情况下都会被驳回.
 
-3. **Tests**: All changes must be accompanied by a new (or changed) test, or
-   a sufficient explanation as to why a new (or changed) test is not required.
+3. **Tests**: 全部变更必须有相应的测试, 除非给出充分理由说明不需要测试.
 
-## Submitting a Pull Request
+## 如何提交 Pull Request
 
-Before any pull request will be accepted the author must first sign a
-Contributor License Agreement (CLA) at https://cla.developers.google.com/.
-
-In order to keep the commit timeline linear
-[squash](https://git-scm.com/book/en/v2/Git-Tools-Rewriting-History#Squashing-Commits)
-your changes down to a single commit and [rebase](https://git-scm.com/docs/git-rebase)
-on google/leveldb/master. This keeps the commit timeline linear and more easily sync'ed
-with the internal repository at Google. More information at GitHub's
-[About Git rebase](https://help.github.com/articles/about-git-rebase/) page.
+PR 被接受之前, 作者需要先签署 [Contributor License Agreement](https://cla.developers.google.com/). 为了保持 commit 时间线连贯, 请 [squash](https://git-scm.com/book/en/v2/Git-Tools-Rewriting-History#Squashing-Commits) 你的变更到一个单条 commit 并基于 google/leveldb/master 做 [rebase](https://git-scm.com/docs/git-rebase). . 这可以保持 commit 时间线连贯, 也更方便和 Google 内部仓库做同步. 更多信息请参考 GitHub 的 [About Git rebase](https://help.github.com/articles/about-git-rebase/) 页面.
 
 # 性能
 
@@ -135,20 +123,11 @@ LevelDB 会在后台压实底层的数据来改善读性能. 上面列出的结�
     readrandom  : 9.775 micros/op;  (approximately 100,000 reads per second before compaction)
     readrandom  : 5.215 micros/op;  (approximately 190,000 reads per second after compaction) 
 
-## Repository contents
-
-See [doc/index.md](doc/index.md) for more explanation. See
-[doc/impl.md](doc/impl.md) for a brief overview of the implementation.
+## 仓库内容
 
 更详细介绍请参见 [doc/index.md](doc/index.md), 如果想了解 leveldb 的实现请参见 [doc/impl.md](doc/impl.md). 
- 
-The public interface is in include/*.h.  Callers should not include or
-rely on the details of any other header files in this package.  Those
-internal APIs may be changed without warning.
 
 LevelDB 对外的接口都包含在 include/*.h 中. 除了该目录下的文件, 用户不应该依赖其它目录下任何文件. 
-
-Guide to header files:
 
 头文件介绍: 
 

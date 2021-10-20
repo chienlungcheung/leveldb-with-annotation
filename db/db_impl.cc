@@ -1398,11 +1398,13 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
 	// nullptr batch 用于触发压实
   if (status.ok() && my_batch != nullptr) {
     // 队首 writer 负责将队列前面若干 writers 的 batch 合并为一个 group.
+		//
     // 注意, writers 被合并但是不出队, 写 log 期间队首 writer 始终不变,
     // 这个能确保后续写 log 写 memtable 期间, 其它进入 Write() 方法
     // 的线程对应的 Writer 因为不可能是队首元素最深只能进入到 Write() 方法入口
     // 的 while() 循环并陷入等待状态, 而不会出现多个 writer 并发写的情况,
     // 从而确保了 log/memtable 相关操作的线程安全.
+		//
     // 执行这些操作需要持有锁, 确保不会同时发生多个针对相同数据的合并操作.
     WriteBatch* updates = BuildBatchGroup(&last_writer);
     // 设置本批次第一个写操作的序列号, 然后根据操作个数更新全局写操作的序列号,
@@ -1414,6 +1416,8 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
     // during this phase since &w is currently responsible for logging
     // and protects against concurrent loggers and concurrent writes
     // into mem_.
+		// 将 updates 追加到 log 文件同时写入 memtable, 期间可以释放锁, 因为 &w 负责
+		// 当前日志记录, 可以避免 mem_ 被并发写入.
     {
       // 这里临时释放可以让其它 writer 趁机在 Write 方法入口处进入写入队列.
       mutex_.Unlock();
@@ -1484,11 +1488,13 @@ WriteBatch* DBImpl::BuildBatchGroup(Writer** last_writer) {
   // 计算队首 writer 数据集大小
   size_t size = WriteBatchInternal::ByteSize(first->batch);
 
-  // Allow the group to grow up to a maximum size, but if the
-  // original write is small, limit the growth so we do not slow
-  // down the small write too much.
+	// 虽然支持合并, 但是有两个限制条件:
+	// 1. 不合并同步写入操作(设置了 writer.sync), 发现同步写操作立马停止后续合并操作并返回已合并内容.
+	// 2. 为了避免小数据量写入操作被延迟太久, 针对合并上限做了限制, 最大 1MB.
   size_t max_size = 1 << 20;
+	// 如果队首 writer 要写内容大小不超过 128KB
   if (size <= (128<<10)) {
+		// 则 max_size 改为不超过 256KB
     max_size = size + (128<<10);
   }
 
@@ -1498,6 +1504,7 @@ WriteBatch* DBImpl::BuildBatchGroup(Writer** last_writer) {
   // iter 从 first 之后 writer 开始遍历
   for (; iter != writers_.end(); ++iter) {
     Writer* w = *iter;
+		// 同步写操作不做合并
     if (w->sync && !first->sync) {
       // Do not include a sync write into a batch handled by a non-sync write.
       break;
@@ -1506,13 +1513,12 @@ WriteBatch* DBImpl::BuildBatchGroup(Writer** last_writer) {
     if (w->batch != nullptr) {
       size += WriteBatchInternal::ByteSize(w->batch);
       if (size > max_size) {
-        // Do not make batch too big
+        // 避免 batch group 过大
         break;
       }
 
       // Append to *result
       if (result == first->batch) {
-        // Switch to temporary batch instead of disturbing caller's batch
         // 不篡改 first writer 的 batch, 而是把若干 batch 合并到临时的 tmp_batch_ 中
         result = tmp_batch_;
         assert(WriteBatchInternal::Count(result) == 0);
