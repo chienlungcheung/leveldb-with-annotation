@@ -233,19 +233,19 @@ void DBImpl::DeleteObsoleteFiles() {
   mutex_.AssertHeld();
 
   if (!bg_error_.ok()) {
-    // After a background error, we don't know whether a new version may
-    // or may not have been committed, so we cannot safely garbage collect.
+		// 如果后台任务出错, 我们不清楚新的 version 是否成功提交,
+		// 所以我们不能放心地删除文件.
     return;
   }
 
-  // Make a set of all of the live files
   // 将当前全部 sorted string table 文件添加到 live 集合中
   std::set<uint64_t> live = pending_outputs_;
   // 将全部存活 version 中维护的文件添加到 live 集合中
   versions_->AddLiveFiles(&live);
 
   std::vector<std::string> filenames;
-  env_->GetChildren(dbname_, &filenames);  // Ignoring errors on purpose
+	// 故意忽略返回值可能反馈的错误, 反正是 GC, 能回收多少是多少
+  env_->GetChildren(dbname_, &filenames);
   uint64_t number;
   FileType type;
   for (size_t i = 0; i < filenames.size(); i++) {
@@ -288,7 +288,9 @@ void DBImpl::DeleteObsoleteFiles() {
     }
   }
 }
-// 该方法用于刚打开数据库时从磁盘读取数据在内存建立 level 架构. save_manifest 用于指示是否续用老的 MANIFEST 文件.
+
+// 该方法用于刚打开数据库时从磁盘读取数据在内存建立 level 架构.
+// save_manifest 用于指示是否续用老的 MANIFEST 文件.
 // - 读取 CURRENT 文件(不存在则新建)找到最新的 MANIFEST 文件(不存在则新建)的名称
 // - 读取该 MANIFEST 文件内容
 // - 清理过期的文件
@@ -1775,7 +1777,6 @@ Status DB::Open(const Options& options, const std::string& dbname,
   Status s = impl->Recover(&edit, &save_manifest);
   // 如果打开成功且当前 memtable 为空则创建之及其对应的 log 文件
   if (s.ok() && impl->mem_ == nullptr) {
-    // Create new log and a corresponding memtable.
     // 创建 log 文件及其对应的 memtable.
     // log 文件名就是一个数字, 由 VersionSet 负责维护.
     uint64_t new_log_number = impl->versions_->NewFileNumber();
@@ -1792,9 +1793,11 @@ Status DB::Open(const Options& options, const std::string& dbname,
       impl->mem_->Ref();
     }
   }
-  // 如果数据库打开成功, 且需要记录变更到 manifest 文件(上面 Recover 导致), 则将 edit 序列化到 manifest
+  // 如果数据库打开成功, 且需要记录变更到 manifest 文件(上面 Recover 导致),
+	// 则将 edit 序列化到 manifest
   if (s.ok() && save_manifest) {
-    edit.SetPrevLogNumber(0);  // No older logs needed after recovery.
+		// 做完 recover 后, 之前的 log 文件都没用了.
+    edit.SetPrevLogNumber(0);
     edit.SetLogNumber(impl->logfile_number_);
     s = impl->versions_->LogAndApply(&edit, &impl->mutex_);
   }
