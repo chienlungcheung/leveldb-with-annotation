@@ -138,7 +138,6 @@ class DBImpl : public DB {
   // Lock over the persistent DB state.  Non-null iff successfully acquired.
   FileLock* db_lock_; // 针对 DB 状态的访问需要使用该锁进行同步
 
-  // State below is protected by mutex_
   // mutex_ 后面的成员变量均由它来守护
   port::Mutex mutex_;
   port::AtomicPointer shutting_down_;
@@ -183,7 +182,6 @@ class DBImpl : public DB {
 
   VersionSet* const versions_;
 
-  // Have we encountered a background error in paranoid mode?
   // 偏执模式下执行后台压实任务时是否遇到了错误
   Status bg_error_ GUARDED_BY(mutex_);
 

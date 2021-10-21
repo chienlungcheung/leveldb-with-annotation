@@ -751,6 +751,8 @@ Status DBImpl::TEST_CompactMemTable() {
   return s;
 }
 
+// 这里要做的其实就是在后台任务出错(如刷盘失败)时记录错误到 bg_error_,
+// 同时唤醒那些等待后台任务完成的线程从而将这个错误传播出去.
 void DBImpl::RecordBackgroundError(const Status& s) {
   mutex_.AssertHeld();
   if (bg_error_.ok()) {
@@ -770,8 +772,7 @@ void DBImpl::MaybeScheduleCompaction() {
     // 如果数据库已经关闭了, 也没必要压实了, 因为关闭时做过了
     // DB is being deleted; no more background compactions
   } else if (!bg_error_.ok()) {
-    // 如果后台压实出了错误, 这意味着待压实数据不会有变化
-    // Already got an error; no more changes
+    // 如果后台压实出了错误, 这意味着将不会有新的数据写操作会成功所以就不会产生新的变更.
   } else if (imm_ == nullptr &&
              manual_compaction_ == nullptr &&
              !versions_->NeedsCompaction()) {
@@ -1372,7 +1373,8 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
   // 所以这里调用的就是 deque 的右值引用版本的 push_back
   writers_.push_back(&w);
   // 当前 writer 工作没完成并且不是队首元素, 换句话说, 其它线程先于当前线程
-	// 调用了 Write() 方法在执行批量更新, 则挂起当前线程.
+	// 调用了 Write() 方法在执行批量更新, 则挂起当前线程, 这里的设计有点像通过
+	// 自旋实现同步.
   while (!w.done && &w != writers_.front()) {
     // 当前 writer 所在线程进入等待状态,
     // 这会导致上面 MutexLock 上的锁被释放掉,
@@ -1414,8 +1416,8 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
 
 		// 将 updates 追加到 log 文件同时写入 memtable, 期间可以释放锁, 因为 &w 负责
 		// 当前日志写入, 可以避免并发 loggers 和并发写操作到 mem_.
-		// 只要 &w 不出队, 后面的 writers 就没机会出循环, 也就到不了这里和它竞争
-		// 写入 log 文件或 memtable, 所以没有线程安全问题.
+		// 只要 &w 不出队, 后面的 writers 就没机会出循环(这个循环相当于一个通过自旋做同步的设施),
+		// 也就到不了这里和它竞争写入 log 文件或 memtable, 所以没有线程安全问题.
     {
       // 这里临时释放可以让其它 writer 趁机在 Write 方法入口处进入写入队列.
       mutex_.Unlock();
@@ -1433,11 +1435,16 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
         // 如果追加 log 文件成功,则将被追加的数据插入到内存中的 memtable 中
         status = WriteBatchInternal::InsertInto(updates, mem_);
       }
+			// 写完了, 后面要操作 writers_ 队列了, 而这个队列在上面拦着一堆后来的 writer,
+			// 要修改状态了, 所以要获取锁.
       mutex_.Lock();
       if (sync_error) {
-        // The state of the log file is indeterminate: the log record we
-        // just added may or may not show up when the DB is re-opened.
-        // So we force the DB into a mode where all future writes fail.
+				// 同步出错, log 文件的状态是不确定的: 我们刚刚追加过 log record,
+				// 在后续重新打开 DB 时候, 那些 record 可能会出现也可能不会出现.
+				// 所以我们强制 DB 进入一个状态, 在这个状态下后续写操作将会全部失败,
+				// 这个模式会通过后续 writer 执行上面
+				// Status status = MakeRoomForWrite(my_batch == nullptr);
+				// 时通过返回的状态感知到.
         RecordBackgroundError(status);
       }
     }
@@ -1451,11 +1458,14 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
     // [&w, last_writer] 的 batch 被合并写入 log 了, 所以将其出队.
     Writer* ready = writers_.front();
     writers_.pop_front();
-    // &w 并没有 wait, 它是本次负责合并并写入的 writer
+    // &w 并没有 wait, 它是本次负责合并写入的 writer,
+		// 所以它 &w 的 status 和 done 可以不用改, 反正也用不到.
     if (ready != &w) {
+			// 传递合并写执行结果给 group 中各个 writer
       ready->status = status;
       ready->done = true;
-      // 唤醒当前方法入口的 w.cv.Wait(), 通过此处被唤醒的 writers 都是被合并到队首 writer 统一写入 log 文件的.
+      // 唤醒当前方法入口的 w.cv.Wait(), 通过此处被唤醒的
+			// writers 都是被合并到队首 writer 统一写入 log 文件的.
       // 它们被唤醒后, 只需检查下 done 状态就可以返回了.
       ready->cv.Signal();
     }
@@ -1463,7 +1473,7 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
     if (ready == last_writer) break;
   }
 
-  // Notify new head of write queue
+  // 如果当前 writers_ 队列不为空, 唤醒当前的队首节点.
   if (!writers_.empty()) {
     // 叫醒新的待写入 writer
     writers_.front()->cv.Signal();
