@@ -67,11 +67,9 @@ PR 被接受之前, 作者需要先签署 [Contributor License Agreement](https:
 下面是通过运行 db_bench 程序得出的性能测试报告. 我们使用的是一个包含一百万数据项的数据库, 
 其中 key 是 16 字节, value 是 100 字节, value 压缩后大约是原来的一半. 
 
-## Setup
+## 设置
 
-We use a database with a million entries.  Each entry has a 16 byte
-key, and a 100 byte value.  Values used by the benchmark compress to
-about half their original size.
+我们用一个具有 100 万数据项的数据库来做测试. 每个数据项有一个 16 字节的 key  和 100 字节的 value(压测时会被压缩到原始大小的一半).
 
     LevelDB:    version 1.1
     Date:       Sun May  1 12:11:26 2011
@@ -131,15 +129,11 @@ LevelDB 对外的接口都包含在 include/*.h 中. 除了该目录下的文件
 
 头文件介绍: 
 
-* **include/db.h**: Main interface to the DB: Start here 主要的接口在这, 使用 leveldb 从这里开始. 
+* **include/db.h**: 主要的接口在这, 使用 leveldb 从这里开始. 
 
-* **include/options.h**: Control over the behavior of an entire database,
-and also control over the behavior of individual reads and writes. 使用 leveldb 过程中与读写有关的控制参数. 
+* **include/options.h**: 使用 leveldb 过程中与读写有关的控制参数. 
 
-* **include/comparator.h**: Abstraction for user-specified comparison function.
-If you want just bytewise comparison of keys, you can use the default
-comparator, but clients can write their own comparator implementations if they
-want custom ordering (e.g. to handle different character encodings, etc.) 比较函数的抽象, 如果你想用逐字节比较 keys 那么可以直接使用默认的比较器. 如果你想定制排序逻辑可以定制自己的比较函数. 
+* **include/comparator.h**: 比较函数的抽象, 如果你想用逐字节比较 keys 那么可以直接使用默认的比较器. 如果你想定制排序逻辑可以定制自己的比较函数. 
 
 * **include/iterator.h**: 迭代数据的接口. 你可以从一个 DB 对象获取到一个迭代器. 
 
