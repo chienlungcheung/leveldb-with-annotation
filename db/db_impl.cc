@@ -583,9 +583,6 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
   // meta->number 对应的文件已经写入磁盘
   pending_outputs_.erase(meta.number);
 
-
-  // Note that if file_size is zero, the file has been deleted and
-  // should not be added to the manifest.
   // 如果 file_size 等于 0, 则对应文件已经被删除了而且不应该加入到 manifest 中.
   int level = 0;
   if (s.ok() && meta.file_size > 0) {
@@ -594,10 +591,12 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
     const Slice max_user_key = meta.largest.user_key();
     if (base != nullptr) {
       // 为 [min_user_key, max_user_key] 对应的 Table 文件找一个落脚的 level.
-      // 注意, leveldb 文件落盘就是直接写, 具体属于哪个 level, 包含的键区间, 另外记录到其它地方.
+      // 注意, leveldb 文件落盘就是直接写, 具体属于哪个 level, 包含的键区间,
+			// 另外记录到其它地方.
       level = base->PickLevelForMemTableOutput(min_user_key, max_user_key);
     }
-    // 将 [min_user_key, max_user_key] 对应的 Table 文件元信息及其 level 记录到 edit 中
+    // 将 [min_user_key, max_user_key] 对应的 Table 文件
+		// 元信息及其 level 记录到 edit 中
     edit->AddFile(level, meta.number, meta.file_size,
                   meta.smallest, meta.largest);
   }
@@ -610,22 +609,24 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
   return s;
 }
 
-// 将内存中的 memtable 转换为 sorted string table 文件并写入到磁盘中. 
-// 当且仅当该方法执行成功后, 切换到一组新的 log-file/memetable 组合并且写一个新的描述符. 
-// 如果执行失败, 则将错误记录到 bg_error_. 
+// 将内存中的 memtable 转换为 sstable 文件并写入到磁盘中.
+// 当且仅当该方法执行成功后, 切换到一组新的 log-file/memtable 组合并且写一个新的描述符.
+// 如果执行失败, 则将错误记录到 bg_error_.
+// 调用该方法之前必须获取相应的锁.
 void DBImpl::CompactMemTable() {
   mutex_.AssertHeld();
   assert(imm_ != nullptr);
 
-  // Save the contents of the memtable as a new Table
-  // 将内存中的 memtable 内容保存为 sorted string table 文件.
+  // 将内存中的 memtable 内容保存为 sstable 文件.
   // 每次落盘就是对当前 level 架构版本的一次编辑.
   VersionEdit edit;
   // 获取当前 dbimpl 对应的最新 version
   Version* base = versions_->current();
   // 将该 version 活跃引用计数加一
   base->Ref();
-  // 将 imm_ 对应的 memtable 以 table 文件形式保存到磁盘并将其对应的元信息(level、filemeta 等)保存到 edit 中
+  // 将 imm_ 对应的 memtable 以 table 文件形式保存到
+	// 磁盘并将其对应的元信息(level、filemeta 等)保存到 edit 中
+	// TODO 为什么保存在 edit 中呢?
   Status s = WriteLevel0Table(imm_, &edit, base);
   // 将该 version 活跃引用计数减一
   base->Unref();
@@ -635,17 +636,15 @@ void DBImpl::CompactMemTable() {
     s = Status::IOError("Deleting DB during memtable compaction");
   }
 
-  // Replace immutable memtable with the generated Table
   // 用生成的 Table 替换不可变的 memtable
   if (s.ok()) {
     edit.SetPrevLogNumber(0);
-    // memetable 已经转换为 Table 写入磁盘了, 之前的 logs 都不需要了.
-    edit.SetLogNumber(logfile_number_);  // Earlier logs no longer needed
+    // memtable 已经转换为 Table 写入磁盘了, 之前的 logs 都不需要了.
+    edit.SetLogNumber(logfile_number_);
     s = versions_->LogAndApply(&edit, &mutex_);
   }
 
   if (s.ok()) {
-    // Commit to the new state
     // 压实完成, 释放引用
     imm_->Unref();
     imm_ = nullptr;
@@ -772,15 +771,15 @@ void DBImpl::MaybeScheduleCompaction() {
     // Already scheduled
   } else if (shutting_down_.Acquire_Load()) {
     // 如果数据库已经关闭了, 也没必要压实了, 因为关闭时做过了
-    // DB is being deleted; no more background compactions
   } else if (!bg_error_.ok()) {
-    // 如果后台压实出了错误, 这意味着将不会有新的数据写操作会成功所以就不会产生新的变更.
+    // 如果后台压实出了错误, 这意味着将不会有新的
+		// 数据写操作会成功所以就不会产生新的变更.
   } else if (imm_ == nullptr &&
              manual_compaction_ == nullptr &&
              !versions_->NeedsCompaction()) {
-    // 如果无 memtable 需压实并且没有手工触发的压实任务并且没有任何 level 需要压实,
+    // 如果无 memtable 需压实并且没有手工触发的
+		// 压实任务并且没有任何 level 需要压实,
     // 则啥也不做
-    // No work to be done
   } else {
     // 否则, 需要触发压实任务
     background_compaction_scheduled_ = true;
@@ -1409,7 +1408,7 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* my_batch) {
     // 的 while() 循环并陷入等待状态, 而不会出现多个 writer 并发写的情况,
     // 从而确保了 log/memtable 相关操作的线程安全.
 		//
-    // 执行这些操作需要持有锁, 确保不会同时发生多个针对相同数据的合并操作.
+    // 执行这些操作需要持有锁, 确保不会同时发生多个针对相同数据的  合并操作.
     WriteBatch* updates = BuildBatchGroup(&last_writer);
     // 设置本批次第一个写操作的序列号, 然后根据操作个数更新全局写操作的序列号,
     // 执行这些操作需要持有锁, 确保 sequence 被互斥访问.
