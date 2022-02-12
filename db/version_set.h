@@ -82,33 +82,32 @@ class Version {
   // 前提: 当前 Version 对象事先已经通过 VersionSet::SaveTo 方法被保存过了. 
   void AddIterators(const ReadOptions&, std::vector<Iterator*>* iters);
 
-  // Lookup the value for key.  If found, store it in *val and
-  // return OK.  Else return a non-OK status.  Fills *stats.
-  // REQUIRES: lock is not held
-  // 该结构体用于在调用 Get 时保存待压实的文件及其 level 信息. 
+  // 该结构体与下面的 Get() 方法配套使用.
+  // 用于在调用 Get 时保存待压实的文件及其 level 信息.
+  // 具体见 Get() 方法.
+  // 前提: 未持有锁(具体见 DBImpl::Get()）
   struct GetStats {
     FileMetaData* seek_file;
     int seek_file_level;
   };
 
-  // 在 DBImpl::Get() 中被调用.
-  // 先查询当前在用的 memtable, 如果没有则查询正在转换为 sorted string table 的 memtable 中寻找, 
-  // 如果没有则我们在磁盘上采用从底向上 level-by-level 的寻找目标 key. 
+  // 在 DBImpl::Get() 中被调用, 用于逐层扫描各个 level 文件定位目标 key.
+  //
+  // 先查询当前在用的 memtable, 如果没有则查询正在转换为 sstable 的 memtable 中寻找,
+  // 如果没有则我们在磁盘上采用从底向上 level-by-level 的寻找目标 key.
+  //
   // 由于 level 越低数据越新, 因此, 当我们在一个较低的 level 找到数据的时候, 不用在更高的 levels 找了.
   // 由于 level-0 文件之间可能存在重叠, 而且针对同一个 key, 后产生的文件数据更新所以先将包含 key 的文件找出来
   // 按照文件号从大到小(对应文件从新到老)排序查找 key; 针对 level-1 及其以上 level, 由于每个 level 内
   // 文件之间不存在重叠, 于是在每个 level 中直接采用二分查找定位 key.
   // 
   // 当查询一个 key 时, 如果找到了对应的 value, 则将 value 保存到 *val 指向的地址并且返回 OK; 
-  // 否则, 返回一个  non-OK. 
+  // 否则, 返回一个  non-OK.
+  //
   // 前提:  调用该方法之前必须未持有锁(调用前 db 会释放持有的锁, 具体见 DBImpl::Get). 
   Status Get(const ReadOptions&, const LookupKey& key, std::string* val,
              GetStats* stats);
 
-  // Adds "stats" into the current state.  Returns true if a new
-  // compaction may need to be triggered, false otherwise.
-  // REQUIRES: lock is held
-  // 
   // 如果上次调用 Get 查询感知到疑似需要进行压实, 则此处进一步检查确定是否触发压实.
   // 检查条件是 stats 的 allowed_seeks 是否降为 0.
   // 如果需要触发一个压实, 则返回 true; 否则返回 false. 
@@ -127,9 +126,7 @@ class Version {
   // 前提: 调用该方法前必须已经持有锁. 
   bool RecordReadSample(Slice key);
 
-  // Reference count management (so Versions do not disappear out from
-  // under live iterators)
-  // version 的引用计数管理
+  // Version 的引用计数管理(可以做到迭代器在则 Versions 也在)
   void Ref();
   void Unref();
 
@@ -164,7 +161,7 @@ class Version {
   // 一个 memtable 对应一个 [smallest_user_key,largest_user_key] 区间, 
   // 我们将该 memtable 构造成一个 Table 文件后, 需要为该文件寻找一个落脚的 level. 
   // 该方法所作的即是依据与区间 [smallest_user_key,largest_user_key] 的重叠情况获取可以存储对应 Table 文件的 level. 
-  // 具体选取过错与压实策略有关.
+  // 具体选取过程与压实策略有关.
   int PickLevelForMemTableOutput(const Slice& smallest_user_key,
                                  const Slice& largest_user_key);
 
@@ -206,21 +203,20 @@ class Version {
   // 该 version 的活跃引用计数
   int refs_;                    
 
-  // List of files per level
-  // 核心成员, 该成员保存了当前最新的 level 架构信息, 即 db 每个 level 的文件元数据链表
+  // 核心成员, 该成员保存了当前最新的 level 架构信息,
+  // 即 db 每个 level 的文件元数据链表
   std::vector<FileMetaData*> files_[config::kNumLevels];
 
-  // Next file to compact based on seek stats.
-  // 下个待压实的文件及其所在的 level
+  // 基于查询统计而得出的下个待压实的文件及其所在的 level
   FileMetaData* file_to_compact_;
   int file_to_compact_level_;
 
-  // Level that should be compacted next and its compaction score.
-  // Score < 1 means compaction is not strictly needed.  These fields
-  // are initialized by Finalize().
-  // 压实分数, 小于 1 意味着压实不是很需要. 由 Finalize() 计算. 
+  // 基于存储比值计算的压实分数,
+  // 小于 1 意味着未到上限, 压实不是很需要.
+  // 由 Finalize() 计算.
   double compaction_score_;
-  // 下个待压实的 level. 由 Finalize() 计算. 
+  // 基于存储比值而得出的下个待压实的 level.
+  // 由 Finalize() 计算.
   int compaction_level_;
 
   explicit Version(VersionSet* vset)
@@ -300,13 +296,9 @@ class VersionSet {
   // 返回指定 level 全部文件的总大小
   int64_t NumLevelBytes(int level) const;
 
-  // Return the current version.
-  //
-  // 返回最新的 version
+  // 返回当前 version
   Version* current() const { return current_; }
 
-  // Return the last sequence number.
-  //
   // 返回上一个序列号
   uint64_t LastSequence() const { return last_sequence_; }
 
@@ -334,23 +326,20 @@ class VersionSet {
   // 返回当前正在进行压实的 log 文件的 number, 如果没有文件在压实则返回 0.
   uint64_t PrevLogNumber() const { return prev_log_number_; }
 
-  // Pick level and inputs for a new compaction.
-  // Returns nullptr if there is no compaction to be done.
-  // Otherwise returns a pointer to a heap-allocated object that
-  // describes the compaction.  Caller should delete the result.
+  // 为一个新的压实过程挑选 level 和输入文件列表.
+  // 挑选待压实 level 主要基于两条策略(优先级先 1 后 2)：
+  // 1. 基于存储统计(Finalize()）发现某个 level 超上限严重, 拿来做压实.
+  // 2. 基于查询统计(Version::Get(), Version::UpdateStats()) 发现有文件超过查询次数上限
+  // 明确待压实 level 后, 将其父 level(即 level+1)与其重叠文件加入到待压实文件集中.
   //
-  // 为一个新的压实过程挑选 level 和输入文件. 
-  // 如果不需要进行压实则返回 nullptr; 否则返回一个指向在堆上分配的 compaction 对象的指针, 该对象表示压实相关信息. 
+  // 如果不需要进行压实则返回 nullptr;
+  // 否则返回一个指向在堆上分配的 compaction 对象的指针, 该对象表示压实相关信息.
   // 调用者负责释放返回的结果. 
   Compaction* PickCompaction();
 
-  // Return a compaction object for compacting the range [begin,end] in
-  // the specified level.  Returns nullptr if there is nothing in that
-  // level that overlaps the specified range.  Caller should delete
-  // the result.
-  //
-  // 为了压实指定 level 中 [begin,end] 范围返回一个 compaction 对象. 
-  // 如果该 level 没有文件与该范围重叠则返回 nullptr. 调用者负责释放返回的结果. 
+  // 返回一个 Compaction 对象， 用于压实指定 level 的 [begin,end] 范围.
+  // 如果指定 level 没有文件与该范围重叠则返回 nullptr.
+  // 调用者负责释放返回的结果.
   Compaction* CompactRange(
       int level,
       const InternalKey* begin,
@@ -362,10 +351,7 @@ class VersionSet {
   // 针对 level-1 及其以上的任意一个文件, 返回下一层与之重叠的最大数据大小(单位, 字节)
   int64_t MaxNextLevelOverlappingBytes();
 
-  // Create an iterator that reads over the compaction inputs for "*c".
-  // The caller should delete the iterator when no longer needed.
-  //
-  // 创建一个 iterator, 它负责读取压实后的输入 *c. 
+  // 创建一个 iterator, 它负责迭代待压实的输入文件内容.
   // 当 iterator 不再使用的时候, 调用者负责删除它. 
   Iterator* MakeInputIterator(Compaction* c);
 
@@ -470,71 +456,46 @@ class VersionSet {
   void operator=(const VersionSet&);
 };
 
-// A Compaction encapsulates information about a compaction.
 // 该类封装了与一次压实过程相关的信息
 class Compaction {
  public:
   ~Compaction();
 
-  // Return the level that is being compacted.  Inputs from "level"
-  // and "level+1" will be merged to produce a set of "level+1" files.
-  //
   // 返回正在进行压实的 level. 
   // 来自 level 和 level+1 的输入将会被合并, 然后产生一组 level+1 文件. 
   int level() const { return level_; }
 
-  // Return the object that holds the edits to the descriptor done
-  // by this compaction.
-  //
-  // 返回一个 VersionEdit 对象, 该对象持有本次压实针对的描述符的编辑内容. 
+  // 返回一个 VersionEdit 对象, 该对象持有本次压实导致的更改, 这些修改会被保存到
+  // descriptor 文件(即 MANIFEST 文件).
   VersionEdit* edit() { return &edit_; }
 
-  // "which" must be either 0 or 1
-  //
+  // 返回 which level 对应的文件个数.
   // 参数 which 非 0 即 1, 因为 input_ 长度为 2. 
   int num_input_files(int which) const { return inputs_[which].size(); }
 
-  // Return the ith input file at "level()+which" ("which" must be 0 or 1).
-  //
-  // 返回 level() + which 中的第 i 个输入文件, which 非 0 即 1.
+  // 返回 level[which] 中的第 i 个输入文件, which 非 0 即 1.
   FileMetaData* input(int which, int i) const { return inputs_[which][i]; }
 
-  // Maximum size of files to build during this compaction.
-  //
   // 压实过程中可以构建的最大文件大小
   uint64_t MaxOutputFileSize() const { return max_output_file_size_; }
 
-  // Is this a trivial compaction that can be implemented by just
-  // moving a single input file to the next level (no merging or splitting)
-  //
-  // 如果一次压实可以通过将单个输入文件移动到下一层实现, 中间不涉及合并或者拆分. 
+  // 如果一次压实可以通过将单个输入文件移动到下一层实现 (中间不涉及合并或者拆分),
   // 那这就是一个平凡的压实. 
   bool IsTrivialMove() const;
 
-  // Add all inputs to this compaction as delete operations to *edit.
-  //
   // 将本次压实的全部输入作为删除操作添加到 *edit 中
   void AddInputDeletions(VersionEdit* edit);
 
-  // Returns true if the information we have available guarantees that
-  // the compaction is producing data in "level+1" for which no data exists
-  // in levels greater than "level+1".
-  //
-  // 如果我们可用的信息能够保证圧实正在 "level+1" 产生数据, 
+  // 如果我们可用的信息能够保证压实正在 "level+1" 产生数据,
   // 而且对于 "level+1" 来说, 它包含的数据没有出现在更高层, 
   // 那么返回 true. 
   bool IsBaseLevelForKey(const Slice& user_key);
 
-  // Returns true iff we should stop building the current output
-  // before processing "internal_key".
-  //
-  // 当且仅当我们在处理参数 "internal_key"  之前应该停止构建当前输出时返回 true
+  // 如果参数 internal_key 在 level+2 太靠后意味着 level 与
+  // level+2 重叠太多了, 这个键就是压实的右区间, 此时返回 true; 否则返回 false.
   bool ShouldStopBefore(const Slice& internal_key);
 
-  // Release the input version for the compaction, once the compaction
-  // is successful.
-  //
-  // 圧实成功后, 释放输入. 
+  // 圧实成功后, 释放输入 Version.
   void ReleaseInputs();
 
  private:
@@ -548,14 +509,9 @@ class Compaction {
   Version* input_version_;
   VersionEdit edit_;
 
-  // Each compaction reads inputs from "level_" and "level_+1"
-  //
-  // 每次压实从 level_ 和 level_+1 读取的内容
-  std::vector<FileMetaData*> inputs_[2];      // The two sets of inputs
+  // 每次压实从 level_ 和 level_+1 读取内容
+  std::vector<FileMetaData*> inputs_[2];
 
-  // State used to check for number of of overlapping grandparent files
-  // (parent == level_ + 1, grandparent == level_ + 2)
-  //
   // 用于保存与祖父重合的文件列表(parent == level_ + 1, grandparent == level_ + 2)
   std::vector<FileMetaData*> grandparents_;
   // 用于 grandparents_ 的索引变量
@@ -566,9 +522,9 @@ class Compaction {
   int64_t overlapped_bytes_;  // Bytes of overlap between current output
                               // and grandparent files
 
-  // State for implementing IsBaseLevelForKey
+  // level_ptrs_ 用于实现 IsBaseLevelForKey
 
-  // level_ptrs_ holds indices into input_version_->levels_: our state
+  // level_ptrs_ 持有 input_version_->levels_ 里的索引: our state
   // is that we are positioned at one of the file ranges for each
   // higher level than the ones involved in this compaction (i.e. for
   // all L >= level_ + 2).

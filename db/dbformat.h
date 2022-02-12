@@ -26,7 +26,7 @@ static const int kNumLevels = 7;
 
 // Level-0 compaction is started when we hit this many files.
 //
-// 当 level-0 文件数达到该值(默认为 4 个)时开始进行压缩
+// 当 level-0 文件数达到该值(默认为 4 个)时开始进行压实
 static const int kL0_CompactionTrigger = 4;
 
 // Soft limit on number of level-0 files.  We slow down writes at this point.

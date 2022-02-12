@@ -49,7 +49,10 @@ const char* InternalKeyComparator::Name() const {
   return "leveldb.InternalKeyComparator";
 }
 
-// 分为两部分: 
+//  < 0 iff "a" < "b"
+//  == 0 iff "a" == "b"
+//  > 0 iff "a" > "b"
+// 具体比较逻辑分为两部分:
 // - internal_key 的 user_key 部分越大则 internal_key 越大, 该部分比较采用用户传入的 comparator 进行比较; 
 // - 如果 user_key 相等, 则序列号越小 internal_key 越大; 
 // - 如果序列号也相等, 则 ValueType 越小 internal_key 越大(因为序列号一般都是单调递增唯一的, 所以实际上用不到该字段). 

@@ -141,9 +141,10 @@ class DBImpl : public DB {
   port::CondVar background_work_finished_signal_ GUARDED_BY(mutex_);
   // 当前在用的 memtable
   MemTable* mem_;
-  // 正在被压实的 memtable, 其对应 log 文件已经满了.
-  MemTable* imm_ GUARDED_BY(mutex_);  // Memtable being compacted
-  port::AtomicPointer has_imm_;       // So bg thread can detect non-null imm_
+  // immutable memtable, 即待压实的 memtable, 其对应 log 文件已经满了.
+  MemTable* imm_ GUARDED_BY(mutex_);
+  // 后台线程可以基于该成员检测是否存在 imm_
+  port::AtomicPointer has_imm_;
   // 指向在写 log 文件
   WritableFile* logfile_;
   // 当前在写 log 文件的文件号
@@ -155,6 +156,14 @@ class DBImpl : public DB {
   std::deque<Writer*> writers_ GUARDED_BY(mutex_);
   WriteBatch* tmp_batch_ GUARDED_BY(mutex_);
 
+  // leveldb 是个 append 类型而非 in-place 修改的数据库,
+  // 所以它的快照和 MySQL 这类直接把某个时间点的全量数据作为
+  // 拷贝作为快照的做法不同.
+  // 就我目前的理解, leveldb 快照是针对某个 key 的, 因为
+  // 针对同一个 key, 在效果上 append 会导致后来的数据项覆盖
+  // 前面的数据项. 但如果用户想用前面的数据项咋办呢? 我们用
+  // 那个特定数据项对应的序列号来做快照就行了, 查找某个 user key
+  // 的时候, 带上快照, 组装成 internal key, 就能找到了.
   SnapshotList snapshots_ GUARDED_BY(mutex_);
 
   // Set of table files to protect from deletion because they are
@@ -167,13 +176,13 @@ class DBImpl : public DB {
   // 或者客户端手动触发或者某个 level 达到压实条件)(无论是否执行中)
   bool background_compaction_scheduled_ GUARDED_BY(mutex_);
 
-  // Information for a manual compaction
+  // 手工压实相关的信息
   struct ManualCompaction {
     int level;
     bool done;
-    const InternalKey* begin;   // null means beginning of key range
-    const InternalKey* end;     // null means end of key range
-    InternalKey tmp_storage;    // Used to keep track of compaction progress
+    const InternalKey* begin;   // null 意味着 key 范围的负无穷
+    const InternalKey* end;     // null 意味着 key 范围的正无穷
+    InternalKey tmp_storage;    // 用于追踪压实进展
   };
   ManualCompaction* manual_compaction_ GUARDED_BY(mutex_);
 

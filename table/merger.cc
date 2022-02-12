@@ -39,7 +39,8 @@ class MergingIterator : public Iterator {
 
   virtual void SeekToFirst() {
     for (int i = 0; i < n_; i++) {
-      children_[i].SeekToFirst(); // 每个 child 对应的迭代范围中最小的肯定是第一个
+      // 每个 child 对应的迭代范围中最小的肯定是第一个
+      children_[i].SeekToFirst();
     }
     FindSmallest(); // 从全部 child 挑那个数据项最小的
     direction_ = kForward;
@@ -47,17 +48,22 @@ class MergingIterator : public Iterator {
 
   virtual void SeekToLast() {
     for (int i = 0; i < n_; i++) {
-      children_[i].SeekToLast(); // 每个 child 对应的迭代范围中最大的肯定是最后一个
+      // 每个 child 对应的迭代范围中最大的肯定是最后一个
+      children_[i].SeekToLast();
     }
-    FindLargest(); // 从全部 child 挑那个最大的
-    direction_ = kReverse; // FindLargest 是倒着找的
+    // 从全部 child 挑那个最大的
+    FindLargest();
+    // FindLargest 是倒着找的
+    direction_ = kReverse;
   }
 
   virtual void Seek(const Slice& target) {
     for (int i = 0; i < n_; i++) {
-      children_[i].Seek(target); // 最后每个 child 指向的都是各自迭代范围第一个大于等于 target 的数据项
+      // 最后每个 child 指向的都是各自迭代范围第一个大于等于 target 的数据项
+      children_[i].Seek(target);
     }
-    FindSmallest(); // 从全部 child 指向的值挑最小的
+    // 从全部 child 指向的值挑最小的
+    FindSmallest();
     direction_ = kForward;
   }
 
@@ -220,7 +226,7 @@ void MergingIterator::FindLargest() {
 }
 }  // namespace
 
-// 提供一个逻辑迭代器, 它本质是在一组迭代器(children[])上加了一层抽象, 
+// 提供一个逻辑迭代器, 它本质是在一组迭代器(children[], 而且顺序从小到大)上加了一层抽象,
 // 对外部看起来只有一个迭代器而且行为与 Iterator 一致. 
 // 该逻辑迭代器拥有 children[] 内容的所有权, 析构时需要释放其内存. 
 // 注意, 我们不保证 children[] 内部每个迭代器之间不重叠, 也不保证有序, 顺序由

@@ -50,8 +50,6 @@ class SnapshotList {
   SnapshotImpl* oldest() const { assert(!empty()); return head_.next_; }
   SnapshotImpl* newest() const { assert(!empty()); return head_.prev_; }
 
-  // Creates a SnapshotImpl and appends it to the end of the list.
-  //
   // 用数据库当前最新的更新操作对应的序列号创建一个快照, 并将其挂到双向循环链表上
   SnapshotImpl* New(SequenceNumber sequence_number) {
     // 最新版本的快照, 版本号必须最大

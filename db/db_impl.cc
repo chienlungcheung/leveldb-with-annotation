@@ -54,13 +54,15 @@ struct DBImpl::Writer {
 struct DBImpl::CompactionState {
   Compaction* const compaction;
 
-  // Sequence numbers < smallest_snapshot are not significant since we
-  // will never have to service a snapshot below smallest_snapshot.
-  // Therefore if we have seen a sequence number S <= smallest_snapshot,
-  // we can drop all entries for the same key with sequence numbers < S.
+  // 小于 smallest_snapshot 的序列号都不用管了, 因为我们
+  // 不会服务一个小于 smallest_snapshot 的快照.
+  // 因此, 如果我们看到了一个不大于 smallest_snapshot 的序列号 S,
+  // 与 S 同一个 key 的其它数据项, 如果序列号小于 S 则可以直接丢弃.
+  //
+  // 关于快照的作用和目的可以见 DBImpl::snapshots_
   SequenceNumber smallest_snapshot;
 
-  // Files produced by compaction
+  // 压实产生的文件, 对应一个 sstable 文件
   struct Output {
     uint64_t number;
     uint64_t file_size;
@@ -69,11 +71,13 @@ struct DBImpl::CompactionState {
   std::vector<Output> outputs;
 
   // State kept for output being generated
+  // builder 会向 outfile 写入压实后数据
   WritableFile* outfile;
   TableBuilder* builder;
 
   uint64_t total_bytes;
 
+  // 返回当前压实在写的文件
   Output* current_output() { return &outputs[outputs.size()-1]; }
 
   explicit CompactionState(Compaction* c)
@@ -238,7 +242,7 @@ void DBImpl::DeleteObsoleteFiles() {
     return;
   }
 
-  // 将当前全部 sorted string table 文件添加到 live 集合中
+  // 将当前全部 sstable 文件添加到 live 集合中
   std::set<uint64_t> live = pending_outputs_;
   // 将全部存活 version 中维护的文件添加到 live 集合中
   versions_->AddLiveFiles(&live);
@@ -626,7 +630,7 @@ void DBImpl::CompactMemTable() {
   base->Ref();
   // 将 imm_ 对应的 memtable 以 table 文件形式保存到
 	// 磁盘并将其对应的元信息(level、filemeta 等)保存到 edit 中
-	// TODO 为什么保存在 edit 中呢?
+	// (edit 维护着 level 架构每一层文件信息, 新文件落盘要记录下来)
   Status s = WriteLevel0Table(imm_, &edit, base);
   // 将该 version 活跃引用计数减一
   base->Unref();
@@ -816,21 +820,27 @@ void DBImpl::BackgroundCall() {
 
 // 该方法仅在 DBImpl::BackgroundCall 调用
 void DBImpl::BackgroundCompaction() {
+  // 压实过程需要全程持有锁, 这也暗示压实不能耗费太多时间.
   mutex_.AssertHeld();
 
+  // 先压实已满的 memtable
   if (imm_ != nullptr) {
     CompactMemTable();
     return;
   }
 
   Compaction* c;
+  // 通过追踪 manual_compaction_ 赋值场景, 仅测试时候才会做手工触发.
   bool is_manual = (manual_compaction_ != nullptr);
   InternalKey manual_end;
+  // 如果手动触发了一个压实
   if (is_manual) {
     ManualCompaction* m = manual_compaction_;
+    // 确定压实范围, 即 level 层待压实文件列表, level+1 与之重叠文件列表.
     c = versions_->CompactRange(m->level, m->begin, m->end);
     m->done = (c == nullptr);
     if (c != nullptr) {
+      // 获取本次压实范围的最大 key
       manual_end = c->input(0, c->num_input_files(0) - 1)->largest;
     }
     Log(options_.info_log,
@@ -840,19 +850,23 @@ void DBImpl::BackgroundCompaction() {
         (m->end ? m->end->DebugString().c_str() : "(end)"),
         (m->done ? "(end)" : manual_end.DebugString().c_str()));
   } else {
+    // 否则根据统计信息确定待压实 level
     c = versions_->PickCompaction();
   }
 
   Status status;
   if (c == nullptr) {
-    // Nothing to do
+    // 无需压实
   } else if (!is_manual && c->IsTrivialMove()) {
-    // Move file to next level
+    // 不做压实, 直接把文件从 level 移动到 level+1
     assert(c->num_input_files(0) == 1);
     FileMetaData* f = c->input(0, 0);
+    // 将该文件从 level 层删除
     c->edit()->DeleteFile(c->level(), f->number);
+    // 将该文件增加到 level+1
     c->edit()->AddFile(c->level() + 1, f->number, f->file_size,
                        f->smallest, f->largest);
+    // 应用本次移动操作
     status = versions_->LogAndApply(c->edit(), &mutex_);
     if (!status.ok()) {
       RecordBackgroundError(status);
@@ -866,12 +880,16 @@ void DBImpl::BackgroundCompaction() {
         versions_->LevelSummary(&tmp));
   } else {
     CompactionState* compact = new CompactionState(c);
+    // 做压实
     status = DoCompactionWork(compact);
     if (!status.ok()) {
       RecordBackgroundError(status);
     }
+    // 清理压实现场
     CleanupCompaction(compact);
+    // 释放压实用到的输入文件
     c->ReleaseInputs();
+    // 删除过期文件
     DeleteObsoleteFiles();
   }
   delete c;
@@ -904,6 +922,8 @@ void DBImpl::CleanupCompaction(CompactionState* compact) {
   mutex_.AssertHeld();
   if (compact->builder != nullptr) {
     // May happen if we get a shutdown call in the middle of compaction
+    // 如果压实过程中收到 shutdown 调用就会出现这个情况.
+    // 正在构造的压实结果数据直接丢掉.
     compact->builder->Abandon();
     delete compact->builder;
   } else {
@@ -912,11 +932,14 @@ void DBImpl::CleanupCompaction(CompactionState* compact) {
   delete compact->outfile;
   for (size_t i = 0; i < compact->outputs.size(); i++) {
     const CompactionState::Output& out = compact->outputs[i];
+    // 已落盘, 解除了被误删除风险, 可以解开保护
     pending_outputs_.erase(out.number);
   }
   delete compact;
 }
 
+// 创建一个 sstable 空文件用于写入压实数据, 同时创建一个 TableBuilder,
+// 后者将会使用前者.
 Status DBImpl::OpenCompactionOutputFile(CompactionState* compact) {
   assert(compact != nullptr);
   assert(compact->builder == nullptr);
@@ -942,6 +965,7 @@ Status DBImpl::OpenCompactionOutputFile(CompactionState* compact) {
   return s;
 }
 
+// 用压实内容构造 sstable 文件并落盘, 同时加载一遍确保构造正确.
 Status DBImpl::FinishCompactionOutputFile(CompactionState* compact,
                                           Iterator* input) {
   assert(compact != nullptr);
@@ -955,6 +979,7 @@ Status DBImpl::FinishCompactionOutputFile(CompactionState* compact,
   Status s = input->status();
   const uint64_t current_entries = compact->builder->NumEntries();
   if (s.ok()) {
+    // 完成 sstable 构造和落盘
     s = compact->builder->Finish();
   } else {
     compact->builder->Abandon();
@@ -976,7 +1001,7 @@ Status DBImpl::FinishCompactionOutputFile(CompactionState* compact,
   compact->outfile = nullptr;
 
   if (s.ok() && current_entries > 0) {
-    // Verify that the table is usable
+    // 确保生成的 sstable 文件可用(加载解析一遍, 成功即可)
     Iterator* iter = table_cache_->NewIterator(ReadOptions(),
                                                output_number,
                                                current_bytes);
@@ -1018,7 +1043,8 @@ Status DBImpl::InstallCompactionResults(CompactionState* compact) {
 
 Status DBImpl::DoCompactionWork(CompactionState* compact) {
   const uint64_t start_micros = env_->NowMicros();
-  int64_t imm_micros = 0;  // Micros spent doing imm_ compactions
+  // 用于 imm_ 压实耗时统计
+  int64_t imm_micros = 0;
 
   Log(options_.info_log,  "Compacting %d@%d + %d@%d files",
       compact->compaction->num_input_files(0),
@@ -1029,39 +1055,59 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   assert(versions_->NumLevelFiles(compact->compaction->level()) > 0);
   assert(compact->builder == nullptr);
   assert(compact->outfile == nullptr);
+  // 如果快照列表为空, 则将最新的操作序列号作为最小的快照
   if (snapshots_.empty()) {
     compact->smallest_snapshot = versions_->LastSequence();
   } else {
+    // 否则从快照列表获取最老的快照对应的序列号作为最小快照.
+    // 虽然最老, 但是没有 release 就是要保障可见性的.
     compact->smallest_snapshot = snapshots_.oldest()->sequence_number();
   }
 
-  // Release mutex while we're actually doing the compaction work
+  // 真正做压实工作的之前要释放锁
   mutex_.Unlock();
 
+  // 针对待压实的全部文件创建一个大迭代器
   Iterator* input = versions_->MakeInputIterator(compact->compaction);
+  // 迭代器指针拨到开头
   input->SeekToFirst();
   Status status;
   ParsedInternalKey ikey;
+  // 下面三个临时变量用来处理多个文件(如果压实涉及了 level-0)
+  // 或多个 level 存在同名 user key 的问题, 典型地有如下两种:
+  // 1. level-0 文件可能存在重叠, 同名 user key 后出现的更新,
+  // 序列号也更大.
+  // 2. 低 level  和高 level 之间可能重叠(这个可能其实是肯定,
+  // 因为不重叠就不用压实了), 同名 user key 先出现的更新, 序列号也更大.
   std::string current_user_key;
   bool has_current_user_key = false;
+  // 如果 user key 出现多次, 下面这个用于记录上次出现时对应的
+  // internal key 的序列号.
   SequenceNumber last_sequence_for_key = kMaxSequenceNumber;
   for (; input->Valid() && !shutting_down_.Acquire_Load(); ) {
-    // Prioritize immutable compaction work
+    // 优先处理已经写满待压实的 memtable
     if (has_imm_.NoBarrier_Load() != nullptr) {
       const uint64_t imm_start = env_->NowMicros();
       mutex_.Lock();
       if (imm_ != nullptr) {
+        // immutable memtable 落盘
         CompactMemTable();
-        // Wake up MakeRoomForWrite() if necessary.
+        // 如有必要唤醒 MakeRoomForWrite()
         background_work_finished_signal_.SignalAll();
       }
       mutex_.Unlock();
       imm_micros += (env_->NowMicros() - imm_start);
     }
 
+    // 即将被处理的 key
     Slice key = input->key();
+    // 当发现截止到 key, level 和 level+2 重叠数据量已经达到上限, 则
+    // 开始进行压实; key 也是压实的最右区间.
+    //　一进来循环看到这个判断代码可能比较懵, 肯定看不太懂, 其实下面这个判断一般
+    // 要经过若干循环才能成立, 先看后面代码再回来看这个判断.
     if (compact->compaction->ShouldStopBefore(key) &&
         compact->builder != nullptr) {
+      // 将压实生成的文件落盘
       status = FinishCompactionOutputFile(compact, input);
       if (!status.ok()) {
         break;
@@ -1070,34 +1116,39 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
 
     // Handle key/value, add to state, etc.
     bool drop = false;
+    // 反序列化 internal key
     if (!ParseInternalKey(key, &ikey)) {
       // Do not hide error keys
       current_user_key.clear();
       has_current_user_key = false;
       last_sequence_for_key = kMaxSequenceNumber;
     } else {
+      // 如果这个 user key 之前迭代未出现过, 记下来
       if (!has_current_user_key ||
           user_comparator()->Compare(ikey.user_key,
                                      Slice(current_user_key)) != 0) {
-        // First occurrence of this user key
         current_user_key.assign(ikey.user_key.data(), ikey.user_key.size());
         has_current_user_key = true;
+        // 标记这个 user key 截止目前轮次迭代对应的序列号;
+        // 因为是首次出现所以这里直接置为序列号最大可能取值.
         last_sequence_for_key = kMaxSequenceNumber;
       }
 
+      // 序列号过小, 丢弃这个 key 本次迭代对应的数据; 后面还有这个 key
+      // 对应的更新的数据.
       if (last_sequence_for_key <= compact->smallest_snapshot) {
         // Hidden by an newer entry for same user key
-        drop = true;    // (A)
+        drop = true;    // 规则 (A)
       } else if (ikey.type == kTypeDeletion &&
                  ikey.sequence <= compact->smallest_snapshot &&
                  compact->compaction->IsBaseLevelForKey(ikey.user_key)) {
-        // For this user key:
-        // (1) there is no data in higher levels
-        // (2) data in lower levels will have larger sequence numbers
-        // (3) data in layers that are being compacted here and have
-        //     smaller sequence numbers will be dropped in the next
-        //     few iterations of this loop (by rule (A) above).
-        // Therefore this deletion marker is obsolete and can be dropped.
+        // 对于这个 user key:
+        // (1) 更高的 levels(指的是祖父 level 及之上)没有对应数据了
+        // (2) 更低的 levels 对应的数据的序列号会更大(这个是显然地)
+        // (3) 目前正在被压实的各个 levels(即 level 和 level+1) 中序列号
+        // 更小的数据在循环的未来几次迭代中会被丢弃(根据上面的规则(A)).
+        //
+        // 综上, 这个删除标记已经过期了并且可以被丢弃.
         drop = true;
       }
 
@@ -1113,8 +1164,9 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
         (int)last_sequence_for_key, (int)compact->smallest_snapshot);
 #endif
 
+    // 如果当前数据项不丢弃, 则进行压实落盘
     if (!drop) {
-      // Open output file if necessary
+      // 如有必要则创建新的 output file
       if (compact->builder == nullptr) {
         status = OpenCompactionOutputFile(compact);
         if (!status.ok()) {
@@ -1122,12 +1174,22 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
         }
       }
       if (compact->builder->NumEntries() == 0) {
+        // 如果一个都没写过, input 迭代器又是从小到大遍历,
+        // 所以当前 user key 肯定是最小的
         compact->current_output()->smallest.DecodeFrom(key);
       }
+      // 否则当前 user key 目前就是最大的
       compact->current_output()->largest.DecodeFrom(key);
+      // 将该 user key 对应的数据项写入 sstable.
+      // TODO 这里有个地方没看明白:
+      // 如果当前 user key 首次出现, 则
+      // 上面 last_sequence_for_key 被置为 kMaxSequenceNumber,
+      // 且类型不是 kTypeDeletion, 那当前数据项就不会被 drop, 即使
+      // 这个数据项实际 sequence number 小于 smallest_snapshot,
+      // 有点矛盾了.
       compact->builder->Add(key, input->value());
 
-      // Close output file if it is big enough
+      // 如果 sstable 文件足够大, 则落盘并关闭
       if (compact->builder->FileSize() >=
           compact->compaction->MaxOutputFileSize()) {
         status = FinishCompactionOutputFile(compact, input);
@@ -1137,6 +1199,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
       }
     }
 
+    // 处理下个 key
     input->Next();
   }
 
@@ -1263,18 +1326,21 @@ Status DBImpl::Get(const ReadOptions& options,
   MutexLock l(&mutex_);
   SequenceNumber snapshot;
   if (options.snapshot != nullptr) {
-    // 如果查询某个快照版本对应的 value(比如针对同样的 key 比如 hello 多次 Put 写入,
-    //  每次 Put 时对应序列号是不同的)
+    // 如果查询某个快照版本对应的 value(比如针对同样的 key,
+    // 比如 hello, 多次 Put 写入, 每次 Put 时对应序列号是不同的)
     snapshot =
         static_cast<const SnapshotImpl*>(options.snapshot)->sequence_number();
   } else {
-    // 否则就用目前数据库最大序列号作为查询时组装 internal_key 用的序列号, 保证查到的是最新的那次更新.
+    // 否则就用目前数据库最大序列号作为查询时组装 internal_key
+    // 用的序列号, 保证查到的是最新的那次更新.
+    // (比较时候也会用到序列号, 序列号越大越新)
     snapshot = versions_->LastSequence();
   }
 
   MemTable* mem = mem_;
   MemTable* imm = imm_;
-  // versionset 的当前 Version 保存了目前最新的 level 架构信息(每个 level 各自包含了哪些文件覆盖了哪些键区间)
+  // VersionSet 的当前 Version 保存了目前最新
+  // 的 level 架构信息(每个 level 各自包含了哪些文件覆盖了哪些键区间)
   Version* current = versions_->current();
   mem->Ref();
   if (imm != nullptr) imm->Ref();
@@ -1283,20 +1349,19 @@ Status DBImpl::Get(const ReadOptions& options,
   bool have_stat_update = false;
   Version::GetStats stats;
 
-  // Unlock while reading from files and memtables
+  // 当读取文件和 memtables 的时候, 释放锁
   {
     mutex_.Unlock();
-    // First look in the memtable, then in the immutable memtable (if any).
     // 根据 user_key 和快照对应的序列号构造一个 internal_key
     LookupKey lkey(key, snapshot);
-    // 先查询内存中与当前 log 文件对应的 memtable, 查不到再逐 level 去 sorted string table 文件查找
+    // 先查询内存中与当前 log 文件对应的 memtable
     if (mem->Get(lkey, value, &s)) {
       // Done
       // 查不到再去待压实的 memtable 去查询
     } else if (imm != nullptr && imm->Get(lkey, value, &s)) {
       // Done
     } else {
-      // 还查不到就去访问 sorted string table 文件去查询
+      // 查不到再逐 level 去 sstable 文件查找
       s = current->Get(options, lkey, value, &stats);
       have_stat_update = true;
     }

@@ -18,9 +18,11 @@ class VersionSet;
 struct FileMetaData {
   // 文件引用计数
   int refs;
-  // 针对每次查询涉及多个文件, 而且该文件位于第一个, 那么这就是需要进行合并压实的信号.
+  // 压实之前一个文件被允许查询的次数.
+  // (具体计算逻辑见 VersionSet::Builder::Apply() 方法)
+  // 如果每次查询涉及多个文件, 而且该文件位于第一个, 那这就是需要进行合并压实的信号.
   // 所以为了实现该功能, 需要该字段记录出现前述情况的次数, 达到阈值就启动压实.
-  int allowed_seeks;          // Seeks allowed until compaction
+  int allowed_seeks;
   // 文件号码
   uint64_t number;
   // 文件大小
