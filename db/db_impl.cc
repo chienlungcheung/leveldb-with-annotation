@@ -556,7 +556,11 @@ Status DBImpl::RecoverLogFile(uint64_t log_number, bool last_log,
 Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
                                 Version* base) {
   mutex_.AssertHeld();
+
+  // 1. 先把 imm 转换为 sstable 并进行落盘
+
   const uint64_t start_micros = env_->NowMicros();
+  // 对应即将构造的 sstable 文件
   FileMetaData meta;
   // 为 memtable 对应的 table 文件生成一个文件 number
   meta.number = versions_->NewFileNumber();
@@ -584,21 +588,30 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
       (unsigned long long) meta.file_size,
       s.ToString().c_str());
   delete iter;
+
+  // sstable 落盘完成, 下面要为其选择对应的 level.
+
   // meta->number 对应的文件已经写入磁盘
   pending_outputs_.erase(meta.number);
 
   // 如果 file_size 等于 0, 则对应文件已经被删除了而且不应该加入到 manifest 中.
   int level = 0;
   if (s.ok() && meta.file_size > 0) {
+    // 2. sstable 落盘完成, 下面要为其选择对应的 level.
+
     // meta 相关成员信息在 BuildTable 时填充过了
     const Slice min_user_key = meta.smallest.user_key();
     const Slice max_user_key = meta.largest.user_key();
     if (base != nullptr) {
-      // 为 [min_user_key, max_user_key] 对应的 Table 文件找一个落脚的 level.
-      // 注意, leveldb 文件落盘就是直接写, 具体属于哪个 level, 包含的键区间,
+      // 为 [min_user_key, max_user_key] 对应的 sstable 文件找一个落脚的 level.
+      // 注意, leveldb 文件存储和 level 架构信息存储是分开的,
+      // 文件落盘就是直接写, 相关架构信息如具体属于哪个 level, 包含的键区间,
 			// 另外记录到其它地方.
       level = base->PickLevelForMemTableOutput(min_user_key, max_user_key);
     }
+
+    // 3. 将 sstable 相关元信息记录到 edit, 方便后面更新 level 架构.
+
     // 将 [min_user_key, max_user_key] 对应的 Table 文件
 		// 元信息及其 level 记录到 edit 中
     edit->AddFile(level, meta.number, meta.file_size,
@@ -812,8 +825,8 @@ void DBImpl::BackgroundCall() {
 
   background_compaction_scheduled_ = false;
 
-  // Previous compaction may have produced too many files in a level,
-  // so reschedule another compaction if needed.
+  // 前一次压实可能在某个 level 产生了过多文件, 所以再调度
+  // 一次压实, 如果判断真得需要的话.
   MaybeScheduleCompaction();
   background_work_finished_signal_.SignalAll();
 }
@@ -829,8 +842,9 @@ void DBImpl::BackgroundCompaction() {
     return;
   }
 
+  // 下面要分手动触发和自动触发来构造 Compaction
   Compaction* c;
-  // 通过追踪 manual_compaction_ 赋值场景, 仅测试时候才会做手工触发.
+  // leveldb 提供了 `DBImpl::CompactRange()` 接口供应用层手工触发压实.
   bool is_manual = (manual_compaction_ != nullptr);
   InternalKey manual_end;
   // 如果手动触发了一个压实
@@ -1019,7 +1033,7 @@ Status DBImpl::FinishCompactionOutputFile(CompactionState* compact,
   return s;
 }
 
-
+// 该方法负责将合并生成的文件添加到 level-(L+1) 层.
 Status DBImpl::InstallCompactionResults(CompactionState* compact) {
   mutex_.AssertHeld();
   Log(options_.info_log,  "Compacted %d@%d + %d@%d files => %lld bytes",
@@ -1041,6 +1055,9 @@ Status DBImpl::InstallCompactionResults(CompactionState* compact) {
   return versions_->LogAndApply(compact->compaction->edit(), &mutex_);
 }
 
+// 具体压实就做一件事情:
+// 遍历待压实文件, 如果某个 key (位于 level-L 或者 level-(L+1))的类型属性取值为"删除",
+// 则确认其在 level-(L+2) 或之上是否存在, 若不存在则丢弃之, 否则写入合并后的文件.
 Status DBImpl::DoCompactionWork(CompactionState* compact) {
   const uint64_t start_micros = env_->NowMicros();
   // 用于 imm_ 压实耗时统计
@@ -1377,8 +1394,9 @@ Status DBImpl::Get(const ReadOptions& options,
   return s;
 }
 
-// 将内存 memtable 和磁盘 sorted string table 文件全部数据结构串起来构造一个大一统迭代器, 可以遍历整个数据库.
-// 具体由 leveldb::Iterator *leveldb::DBImpl::NewInternalIterator 负责完成.
+// 将内存 memtable 和磁盘 sorted string table 文件全部数据结构
+// 串起来构造一个大一统迭代器, 可以遍历整个数据库.
+// 具体由 leveldb::DBImpl::NewInternalIterator 负责完成.
 Iterator* DBImpl::NewIterator(const ReadOptions& options) {
   SequenceNumber latest_snapshot;
   uint32_t seed;

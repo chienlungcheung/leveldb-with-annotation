@@ -59,9 +59,8 @@ class DBImpl : public DB {
   // file at a level >= 1.
   int64_t TEST_MaxNextLevelOverlappingBytes();
 
-  // Record a sample of bytes read at the specified internal key.
-  // Samples are taken approximately once every config::kReadBytesPeriod
-  // bytes.
+  // 记录在特定 internal key 中读取到的字节的一个抽样.
+  // 抽样基本每隔 config::kReadBytesPeriod 字节进行一次.
   void RecordReadSample(Slice key);
 
  private:

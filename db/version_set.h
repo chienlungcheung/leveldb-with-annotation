@@ -330,7 +330,7 @@ class VersionSet {
   // 挑选待压实 level 主要基于两条策略(优先级先 1 后 2)：
   // 1. 基于存储统计(Finalize()）发现某个 level 超上限严重, 拿来做压实.
   // 2. 基于查询统计(Version::Get(), Version::UpdateStats()) 发现有文件超过查询次数上限
-  // 明确待压实 level 后, 将其父 level(即 level+1)与其重叠文件加入到待压实文件集中.
+  // 明确待压实 level 后, 挑选其待压实文件, 然后从将其父 level(即 level+1)将与其重叠文件加入到待压实文件集中.
   //
   // 如果不需要进行压实则返回 nullptr;
   // 否则返回一个指向在堆上分配的 compaction 对象的指针, 该对象表示压实相关信息.
@@ -352,7 +352,8 @@ class VersionSet {
   int64_t MaxNextLevelOverlappingBytes();
 
   // 创建一个 iterator, 它负责迭代待压实的输入文件内容.
-  // 当 iterator 不再使用的时候, 调用者负责删除它. 
+  // 当 iterator 不再使用的时候, 调用者负责删除它.
+  // 注意: 因为待压实文件跨 level 存在重叠, 所以迭代器指向的内容并不是严格有序的.
   Iterator* MakeInputIterator(Compaction* c);
 
   // Returns true iff some level needs a compaction.
@@ -513,6 +514,8 @@ class Compaction {
   std::vector<FileMetaData*> inputs_[2];
 
   // 用于保存与祖父重合的文件列表(parent == level_ + 1, grandparent == level_ + 2)
+  // 这个主要是一个限制, 限制 level 和 level+1 合并后每个文件
+  // 的大小以避免后续压实负担太重.
   std::vector<FileMetaData*> grandparents_;
   // 用于 grandparents_ 的索引变量
   size_t grandparent_index_;  // Index in grandparent_starts_

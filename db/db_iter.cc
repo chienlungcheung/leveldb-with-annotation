@@ -30,19 +30,16 @@ static void DumpInternalIter(Iterator* iter) {
 #endif
 
 namespace {
-
-// Memtables and sstables that make the DB representation contain
-// (userkey,seq,type) => uservalue entries.  DBIter
-// combines multiple entries for the same userkey found in the DB
-// representation into a single entry while accounting for sequence
-// numbers, deletion markers, overwrites, etc.
+// Memtable 和 sstables 构成了整个 DB, 它们包含着
+// (userkey, seq, type) 到 uservalue 映射.
+// DBIter 把 userkey 相同的多个数据项组合成一个, 同时
+// 也考虑到了序列号, 删除标记, 覆写等.
 class DBIter: public Iterator {
  public:
-  // Which direction is the iterator currently moving?
-  // (1) When moving forward, the internal iterator is positioned at
-  //     the exact entry that yields this->key(), this->value()
-  // (2) When moving backwards, the internal iterator is positioned
-  //     just before all entries whose user key == this->key().
+  // 迭代器当前在向哪个方向移动?
+  // (1) 当向前移动的时候, 内部迭代器会恰好位于目标 key 对应的数据项上,
+  //     可以在其上调用 this->key(), this->value() 返回的就是所要的值.
+  // (2) 当向后移动的时候, 内部迭代器恰好位于目标 key 对应的全部数据项之前的一项上.
   enum Direction {
     kForward,
     kReverse

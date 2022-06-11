@@ -882,8 +882,10 @@ void PosixEnv::Schedule(
   if (!started_background_thread_) {
     started_background_thread_ = true;
     std::thread background_thread(PosixEnv::BackgroundThreadEntryPoint, this);
-    // 调用 detach 后, 线程执行部分与线程对象分离, 独立去运行, 线程对象不再拥有对执行部分的所有权. 
-    // 线程执行完毕会自动释放全部分配的资源. 所以一会 background_thread 出作用域被销毁也不影响
+    // 调用 detach 后, 线程执行部分与线程对象分离, 独立去运行,
+    // 线程对象不再拥有对执行部分的所有权.
+    // 线程执行完毕会自动释放全部分配的资源.
+    // 所以一会 background_thread 出作用域被销毁也不影响
     // 线程在后台运行.
     background_thread.detach();
   }

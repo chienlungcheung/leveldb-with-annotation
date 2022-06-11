@@ -514,9 +514,9 @@ Status Version::Get(const ReadOptions& options,
     for (uint32_t i = 0; i < num_files; ++i) {
       if (last_file_read != nullptr && stats->seek_file == nullptr) {
         // We have had more than one seek for this read.  Charge the 1st file.
-        // 如果针对某个 user_key, 需要查询多个文件(从底向上逐个 level 扫描, 下面的都是疑似包含),
-        // 做了不必要的查询, 那这就是要进行文件压实的信号, 从下向上合并若干 level 构成去冗的文件
-        // 可以加速后续的查询. 这就要求我们记录下第一个疑似包含 user_key 的文件及其 level.
+        // 如果针对某个 user_key, 需要查询多个文件(从底向上逐个 level 扫描, 下面的因为和上面的键空间重叠都是疑似包含),
+        // 做了不必要的查询, 那这就是要进行文件压实的信号, 从下向上合并文件尽量消除键空间重叠,
+        // 这可以加速后续的查询. 这就要求我们记录下第一个疑似包含 user_key 的文件及其 level.
         // 后续会进行压实处理.
         stats->seek_file = last_file_read;
         stats->seek_file_level = last_file_read_level;
@@ -651,15 +651,29 @@ bool Version::OverlapInLevel(int level,
                                smallest_user_key, largest_user_key);
 }
 
+// 该方法负责为一个 memtable 在当前 level 架构(保存在当前 version 中)找一个落脚的 level.
+// 如果该 memtable 与 level-0 文件有重叠, 则放到 level-0; 否则, 它的判断条件就从从 level-1 开始寻找,
+// 主要是借用了压实磁盘 level 某个文件时生成新文件的判断条件之二, 即
+// "在合并 level-L 和 level-(L+1) 文件时生成新文件要满足两个条件:
+// 条件一是达到了 2MB, 条件二是如果 level-L 和 level-(L+2) 重叠文件超过 10 个".
+//
+// 一个 memtable 对应一个 [smallest_user_key,largest_user_key] 区间,
+// 我们将该 memtable 构造成一个 sstable 文件后, 需要为该文件寻找一个落脚的 level.
+// 该方法所作的即是依据与区间 [smallest_user_key,largest_user_key] 的重叠情况获取可以存储对应 sstable 文件的 level.
+// 具体选取过程与压实策略有关.
 int Version::PickLevelForMemTableOutput(
     const Slice& smallest_user_key,
     const Slice& largest_user_key) {
   int level = 0;
   // 检查 level-0 是否有文件与 [smallest_user_key, largest_user_key] 有重叠, 
-  // 如果存在重叠, 返回 level-0; 否则进一步检查其它 levels. 
+  // 如果存在重叠, 返回 level-0; 否则进一步检查其它 levels, 最后不管选中谁, 这个目标 level 和 sstable 文件肯定没有重叠.
   if (!OverlapInLevel(0, &smallest_user_key, &largest_user_key)) {
-    // Push to next level if there is no overlap in next level,
-    // and the #bytes overlapping in the level after that are limited.
+    // 接下来就是尽量把 sstable 文件要落脚的目的地 level 尽量上推, 只要满足两个条件:
+    // 1. sstable 文件和 next level 没有重叠.
+    // 2. sstable 和 next of next level 重叠字节数不超过阈值.
+    //
+    // 注意, 此时 level 取值为 0.
+    //
     // 分别构建 smallest_user_key 和 largest_user_key 对应的 internal_key. 
     // 针对 internal_key, user_key 部分越大越大, 序列号越小越大, 类型越小越大. 
     InternalKey start(smallest_user_key, kMaxSequenceNumber, kValueTypeForSeek);
@@ -1718,6 +1732,8 @@ void VersionSet::SetupOtherInputs(Compaction* c) {
 
   // 为了尽可能多的压实数据, 确认我们是否可以在不改变 level+1 层文件个数
   // 的前提下增加 level 层的文件个数.
+  // 之所以这么限制, 是因为 level 文件个数增加可能导致 level+1 有新的重叠文件,
+  // 我们要避免最后把 level 和 level+1 文件都纳入到本次压实.
   if (!c->inputs_[1].empty()) {
     std::vector<FileMetaData*> expanded0;
     // 寻找"漏网之鱼", 将 level 层落入待压实范围的全部文件捞出来, 放到 &expanded0 以与 inputs[0] 区别
