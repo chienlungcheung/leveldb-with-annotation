@@ -12,10 +12,12 @@
 // Version,VersionSet are thread-compatible, but require external
 // synchronization on all accesses.
 //
-// 一个 DBImpl 的表示由一组 Versions 构成. 
-// 最新的 version 叫做 "current". 较老的 versions 可能也会被保留以为活跃的迭代器提供一致性视图. 
-// 每个 Version 跟踪每一个 level 的一组 Table 文件. 全部 versions 集合由 VersionSet 维护. 
-// Version, VersionSet 都是兼容线程的, 但是在访问的时候需要外部的同步设施. 
+// 一个 DBImpl 由一组 Versions 构成, 最新的 version 叫做 "current".
+// 较老的 versions 可能也会被保留以为存活的迭代器提供一致性视图.
+// 每个 Version 会追踪每个 level 的 sstable 文件.
+// VersionSet 保存全部 Versions.
+// Version, VersionSet 都是线程兼容的(非线程安全但是可以做到),
+// 但是在并发访问的时候需要外部的同步设施.
 #ifndef STORAGE_LEVELDB_DB_VERSION_SET_H_
 #define STORAGE_LEVELDB_DB_VERSION_SET_H_
 
@@ -40,10 +42,6 @@ class Version;
 class VersionSet;
 class WritableFile;
 
-// Return the smallest index i such that files[i]->largest >= key.
-// Return files.size() if there is no such file.
-// REQUIRES: "files" contains a sorted list of non-overlapping files.
-//
 // 返回满足条件 files[i]->largest >= key 的最小索引 i; 如果不存在则返回 files 列表长度. 
 // 通过二分法在 files 里查找. 
 // 要求: files 必须包含一组有序的且无重叠的文件(除了 level-0, 其它 levels 的文件列表均满足该条件). 
@@ -68,18 +66,16 @@ bool SomeFileOverlapsRange(const InternalKeyComparator& icmp,
                            const Slice* smallest_user_key,
                            const Slice* largest_user_key);
 
-// 一个 DBImpl 的表示由一组 Versions 构成. 
+// 一个 DBImpl 由一组 Versions 构成.
 // 每个 Version 都保存着 db 每个 level 的文件元数据链表, 
 // 核心数据成员为 std::vector<FileMetaData*> files_[config::kNumLevels]. 
 // (一个 Version 对应一个 DBImpl 快照. )
 class Version {
  public:
-  // Append to *iters a sequence of iterators that will
-  // yield the contents of this Version when merged together.
-  // REQUIRES: This version has been saved (see VersionSet::SaveTo)
-  //
-  // 将一系列迭代器追加到 iters 向量里, 这些迭代器在被合并后会生成该版本的内容. 
-  // 前提: 当前 Version 对象事先已经通过 VersionSet::SaveTo 方法被保存过了. 
+  // 将当前 version 维护的 level 架构中每一个 sstable 文件对应的迭代器
+  // 追加到 iters 向量里, 这些迭代器加上 memtable 的迭代器, 就能
+  // 遍历整个数据库的内容了.
+  // 前提: 当前 Version 对象事先已经通过 VersionSet::SaveTo 方法被保存过了.
   void AddIterators(const ReadOptions&, std::vector<Iterator*>* iters);
 
   // 该结构体与下面的 Get() 方法配套使用.
@@ -91,8 +87,8 @@ class Version {
     int seek_file_level;
   };
 
+  // DBImpl::Get() 自己只在两个内存结构 memtable 中查询, 如果没找到就要扫盘, 扫盘就是 Version::Get() 负责的.
   // 在 DBImpl::Get() 中被调用, 用于逐层扫描各个 level 文件定位目标 key.
-  //
   // 先查询当前在用的 memtable, 如果没有则查询正在转换为 sstable 的 memtable 中寻找,
   // 如果没有则我们在磁盘上采用从底向上 level-by-level 的寻找目标 key.
   //
@@ -239,7 +235,7 @@ class Version {
 // 较老的 versions 可能也会被保留以为活跃的迭代器提供一致性视图. 
 // Version 跟踪全部 level 及其文件. 
 // 全部 versions 集合由 VersionSet 维护. 
-// Version, VersionSet 都是兼容线程的, 
+// Version, VersionSet 都是线程兼容的,
 // 但是在访问的时候需要外部的同步设施. 
 class VersionSet {
  public:
@@ -296,7 +292,7 @@ class VersionSet {
   // 返回指定 level 全部文件的总大小
   int64_t NumLevelBytes(int level) const;
 
-  // 返回当前 version
+  // 返回当前 version, 代表了当前 leveldb 磁盘文件架构的一个视图.
   Version* current() const { return current_; }
 
   // 返回上一个序列号
@@ -372,9 +368,6 @@ class VersionSet {
   // 将 level 中的文件都插入到集合 live 中.
   void AddLiveFiles(std::set<uint64_t>* live);
 
-  // Return the approximate offset in the database of the data for
-  // "key" as of version "v".
-  //
   // 返回目标 key 在 v 对应的 level 架构中的估计字节偏移量
   uint64_t ApproximateOffsetOf(Version* v, const InternalKey& key);
 
@@ -383,7 +376,7 @@ class VersionSet {
   struct LevelSummaryStorage {
     char buffer[100];
   };
-  // 针对每一个 level 返回一个人类可读的短(一行)摘要. 
+  // 返回当前 version 保存的每个 level 文件数目.
   // 使用 *scratch 作为底层存储. 
   const char* LevelSummary(LevelSummaryStorage* scratch) const;
 
@@ -411,7 +404,9 @@ class VersionSet {
   // Save current contents to *log
   Status WriteSnapshot(log::Writer* log);
 
-  // 每个 VersionSet 包含一组 Version, 这里是将新创建的 Version 追加到该 VersionSet 的双向链表中.
+  // 令 v 成为 current_.
+  // 每个 VersionSet 包含一组 Version,
+  // 这里是将新创建的 Version 追加到该 VersionSet 的双向链表中.
   // 具体操作为将 v 插入到双向循环链表, 且位于 dummy_versions_ 前面. 
   void AppendVersion(Version* v);
 
@@ -437,10 +432,10 @@ class VersionSet {
   // Opened lazily
   // 当前 MANIFEST 文件
   WritableFile* descriptor_file_;
-  // MANIFEST 文件格式同 log 文件, 所以写入方法就复用了. 其每条日志就是一个序列化后的 VersionEdit.
+  // MANIFEST 文件格式同 log 文件, 所以写入方法就复用了.
+  // 其每条日志就是一个序列化后的 VersionEdit.
   log::Writer* descriptor_log_; 
-  // Head of circular doubly-linked list of versions.
-  // 属于该 VersionSet 的 Version 都会被维护到一个双向循环链表中, 
+  // 属于该 VersionSet 的 Version 都会被维护到一个双向循环链表中,
   // 而且新加入的 Version 都会插入到 dummy_versions_ 前面. 
   // dummy_versions_.next_ 默认指向自己(具体见 Version 构造函数)后续指向最老的 version.
   Version dummy_versions_; 

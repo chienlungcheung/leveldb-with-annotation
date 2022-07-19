@@ -289,7 +289,7 @@ Iterator* Version::NewConcatenatingIterator(const ReadOptions& options,
 }
 
 // 将当前 version 维护的 level 架构中每一个 sorted string table 文件对应的迭代器
-// 追加到 iters 向量里, 这些迭代器加上 memtable 的迭代器, 就能
+// 追加到 iters 向量里, 这些迭代器加上两个 memtable 的迭代器, 就能
 // 遍历整个数据库的内容了. 
 // 前提: 当前 Version 对象事先已经通过 VersionSet::SaveTo 方法被保存过了. 
 void Version::AddIterators(const ReadOptions& options,
@@ -793,15 +793,12 @@ std::string Version::DebugString() const {
   return r;
 }
 
-// A helper class so we can efficiently apply a whole sequence
-// of edits to a particular state without creating intermediate
-// Versions that contain full copies of the intermediate state.
-// 一个辅助类, 帮助我们在不创建中间 Versions(包含中间状态的全量拷贝)的前提下
-// 高效地将一系列编辑(VersionEdit) 应用到某个 VersionSet 的特定 Version 中. 
+// 辅助类, 与 VerisonEdit 配套.
+// 帮助我们在不创建中间 Versions(包含中间状态的全量拷贝)的前提下
+// 高效地将一系列增量更新(VersionEdit) 叠加到当前 Version.
 class VersionSet::Builder {
  private:
-  // Helper to sort by v->files_[file_number].smallest
-  // 辅助类: 用于基于 v->files_[file_number].smallest 进行排序
+  // 辅助类: 基于 v->files_[file_number].smallest 进行排序
   struct BySmallestKey {
     const InternalKeyComparator* internal_comparator;
 
@@ -812,8 +809,8 @@ class VersionSet::Builder {
       if (r != 0) {
         return (r < 0);
       } else {
-        // Break ties by file number
-        // 当两个文件的最小 key 一样大的时候, 谁的文件编号更小谁排前面
+        // 当两个文件的最小 key 一样大的时候,
+        // 谁的文件编号更小谁排前面
         return (f1->number < f2->number);
       }
     }
@@ -873,12 +870,12 @@ class VersionSet::Builder {
     base_->Unref();
   }
 
-  // Apply all of the edits in *edit to the current state.
-  // 将 edit 中包含的针对文件的新增和删除操作导入 Builder 的 levels 中,
+  // 将 edit 中包含的针对文件的新增和删除操作导入当前 Builder 中,
   // 后续会调用 Builder::SaveTo 方法将其与 VersionSet 中当前 version
   // 进行合并然后生成新的 version. 
   void Apply(VersionEdit* edit) {
-    // Update compaction pointers
+    // 更新压实指针信息
+    // 将 edit 中保存的每一层下次压实起始 key 复制到 VersionSet 中
     for (size_t i = 0; i < edit->compact_pointers_.size(); i++) {
       const int level = edit->compact_pointers_[i].first;
       // 与下面新增和删除不同, 这里直接修改 vset
@@ -886,7 +883,7 @@ class VersionSet::Builder {
           edit->compact_pointers_[i].second.Encode().ToString();
     }
 
-    // Delete files
+    // 删除文件
     // 将 edit 中保存的待删除文件集合导入到 levels_[].deleted_files 中
     const VersionEdit::DeletedFileSet& del = edit->deleted_files_;
     for (VersionEdit::DeletedFileSet::const_iterator iter = del.begin();
@@ -897,7 +894,7 @@ class VersionSet::Builder {
       levels_[level].deleted_files.insert(number);
     }
 
-    // Add new files
+    // 添加新文件
     // 将 edit 中保存的新增文件集合导入到 levels_[].added_files 中
     for (size_t i = 0; i < edit->new_files_.size(); i++) {
       // pair 第一个参数为 level
@@ -906,20 +903,7 @@ class VersionSet::Builder {
       FileMetaData* f = new FileMetaData(edit->new_files_[i].second);
       f->refs = 1;
 
-      // We arrange to automatically compact this file after
-      // a certain number of seeks.  Let's assume:
-      //   (1) One seek costs 10ms
-      //   (2) Writing or reading 1MB costs 10ms (100MB/s)
-      //   (3) A compaction of 1MB does 25MB of IO:
-      //         1MB read from this level
-      //         10-12MB read from next level (boundaries may be misaligned)
-      //         10-12MB written to next level
-      // This implies that 25 seeks cost the same as the compaction
-      // of 1MB of data.  I.e., one seek costs approximately the
-      // same as the compaction of 40KB of data.  We are a little
-      // conservative and allow approximately one seek for every 16KB
-      // of data before triggering a compaction.
-      // 经过一定次数查询后再自动进行压实操作. 我们假设: 
+      // leveldb 针对经过一定查询次数的文件进行自动压实. 我们假设:
       //    (1)一次查询消耗 10ms
       //    (2)写或者读 1MB 数据消耗 10ms(即 100MB/s, 这是一般磁盘 IO 速度)
       //    (3)1MB 数据的压实做了 25MB 数据的 IO 工作: 
@@ -928,10 +912,9 @@ class VersionSet::Builder {
       //        将压实后的 10-12MB 数据写入到 level-(L+1)
       // 基于上述假设, 我们可以得出, 执行 25 次查询消耗的时间与压实 1MB 数据
       // 的时间相同, 都是 250ms. 也就是说, 一次查询大约相当于压实 40KB (=1MB/25)数据.
-      // 我们保守一些, 假设每次查询大约相当于压实 16KB 数据.
-      //
-      // 压实之前该文件被允许查询的次数为[文件字节数/16KB],
-      // 一个文件最大 2MB, 则在压实前最多允许查询 128 次.
+      // 现实可能没这么理想, 我们保守一些, 假设每次查询大约相当于压实 16KB 数据, 这样
+      // 我们就可以得出压实之前一个文件被允许查询的次数 == [文件字节数/16KB],
+      // 一个文件最大 2MB, 则在压实前最多允许查询 128 次, 超过次数会触发压实操作.
       f->allowed_seeks = (f->file_size / 16384);
       // 如果允许查询次数小于 100, 则按 100 次处理. 
       if (f->allowed_seeks < 100) f->allowed_seeks = 100;
@@ -942,42 +925,44 @@ class VersionSet::Builder {
     }
   }
 
-  // Save the current state in *v.
-  // 将 VersionSet 当前 version 和 builder 之前保存的 VersionEdit 新增文件
-  // 合并构造新的 Version v.
+  // 将当前 version 与 builder 保存的新增文件按序合并
+  // 追加到新 Version v 中.
   void SaveTo(Version* v) {
     BySmallestKey cmp;
     cmp.internal_comparator = &vset_->icmp_;
-    // 从低到高将每个 level 的 base_ 和 LevelState 合并到 v 的对应 level 中
+    // 从低到高将当前 Version base_ 每个 level 文件列表和 Builder::levels_ 每个对应 level
+    // 新增文件列表合并, 并保存到 Version v 对应 level 中.
     for (int level = 0; level < config::kNumLevels; level++) {
-      // Merge the set of added files with the set of pre-existing files.
-      // Drop any deleted files.  Store the result in *v.
+      // 把新加的文件和已有文件进行合并, 丢弃已被删除的文件, 最终结果保存到 *v.
+
       // Version base_ 中 level-L 对应的文件列表
       const std::vector<FileMetaData*>& base_files = base_->files_[level];
       std::vector<FileMetaData*>::const_iterator base_iter = base_files.begin();
       std::vector<FileMetaData*>::const_iterator base_end = base_files.end();
       // builder 保存的 level-L 对应的新增文件集合
       const FileSet* added = levels_[level].added_files;
-      // 将 Version v 中 level-L 对应的文件列表大小扩张为 Version base_ 
-      // 中 level-L 对应的文件列表大小加上 level-L 对应的新增文件集合大小
       v->files_[level].reserve(base_files.size() + added->size());
-      // 下面两个循环按照文件包含的 key 从小到大顺序合并 level-L 对应的 base_ 文件列表
-      // 和 builder.LevelState 新增文件列表.
+      // 下面两个循环按照文件包含的 key 从小到大顺序合并前述两个文件列表.
+      // (具体逻辑就是将两个有序列表合并的过程.)
       for (FileSet::const_iterator added_iter = added->begin();
            added_iter != added->end();
            ++added_iter) {
-        // Add all smaller files listed in base_
-        // 针对每个新增文件 *added_iter, 
-        // 从 base_ 的 level-L 对应的当前文件列表中寻找第一个大于它的文件, 寻找过程采用 BySmallestKey 比较器
+        // 针对 builder 中每个新增文件 *added_iter,
+        // 从 base_ 对应 level 寻找第一个大于它的文件,
+        // 然后将这个文件之前的文件(builder 里文件列表从小到大有序)
+        // 都追加到 v 中.
+        // 寻找过程采用 BySmallestKey 比较器(这个抽象极好).
         for (std::vector<FileMetaData*>::const_iterator bpos
                  = std::upper_bound(base_iter, base_end, *added_iter, cmp);
-             base_iter != bpos;
+             base_iter != bpos; // 如果相等说明 builder 全部文件都比 added_iter 大
              ++base_iter) {
-          // 将 bpos 之前的 *base_iter 指向的文件追加到 Version v 的对应 level-L 的文件列表中
+          // bpos 位置处文件小于 added_iter,
+          // 将其追加到 Version v 对应 level 的文件列表中
           MaybeAddFile(v, level, *base_iter);
         }
 
-        // 将 *added_iter 追加到 Version v 的对应 level-L 的文件列表中, 即 bpos 位置
+        // builder 中小于 added_iter 的文件都追加过了,
+        // 将 *added_iter 追加到 Version v 的对应 level 的文件列表中.
         MaybeAddFile(v, level, *added_iter);
       }
 
@@ -1019,7 +1004,7 @@ class VersionSet::Builder {
     } else {
       std::vector<FileMetaData*>* files = &v->files_[level];
       if (level > 0 && !files->empty()) {
-        // Must not overlap
+        // 针对 level-0 之外的 level, 其所含文件之间不许重叠.
         // 确保新加入的 f 的最小 key 大于当前文件列表最后的文件的最大 key
         assert(vset_->icmp_.Compare((*files)[files->size()-1]->largest,
                                     f->smallest) < 0);
@@ -1487,29 +1472,25 @@ const char* VersionSet::LevelSummary(LevelSummaryStorage* scratch) const {
   return scratch->buffer;
 }
 
-// 返回目标 key 在 v 对应的 level 架构中的估计字节偏移量
+// 把全部 levels 拉平, 确定指定 key 大约在 v 对应的 level 架构中第几个字节处.
 uint64_t VersionSet::ApproximateOffsetOf(Version* v, const InternalKey& ikey) {
   uint64_t result = 0;
-  // 遍历保存在 v 中的 level 架构信息
+  // 遍历保存在 v 中的 level 架构信息, 从低到高
   for (int level = 0; level < config::kNumLevels; level++) {
     const std::vector<FileMetaData*>& files = v->files_[level];
+    // 文件按照 key 从小到大
     for (size_t i = 0; i < files.size(); i++) {
-      // 如果整个文件都位于目标 key 之前, 则偏移肯定更靠后
+      // 如果整个文件都位于目标 key 之前, 则其实际位置肯定更靠后, 直接累加该文件字节数
       if (icmp_.Compare(files[i]->largest, ikey) <= 0) {
-        // Entire file is before "ikey", so just add the file size
         result += files[i]->file_size;
       } else if (icmp_.Compare(files[i]->smallest, ikey) > 0) {
-        // Entire file is after "ikey", so ignore
         // 如果整个文件都位于目标 key 之后, 则后面文件都不用看了, 偏移肯定在此文件之前
         if (level > 0) {
-          // Files other than level 0 are sorted by meta->smallest, so
-          // no further files in this level will contain data for
-          // "ikey".
+          // 如果当前计算 level 不为 0, 则其文件相互无重叠, 没必要考虑后面文件了.
           break;
         }
       } else {
-        // "ikey" falls in the range for this table.  Add the
-        // approximate offset of "ikey" within the table.
+        // 目标 key 大小位于文件键空间内
         Table* tableptr;
         Iterator* iter = table_cache_->NewIterator(
             ReadOptions(), files[i]->number, files[i]->file_size, &tableptr);
@@ -1531,6 +1512,9 @@ uint64_t VersionSet::ApproximateOffsetOf(Version* v, const InternalKey& ikey) {
 // 在每个 version 中从低到高遍历 level(针对同样的 key, level 越低其对应数据越新),
 // 将 level 中的文件都插入到集合 live 中.
 // 注意, 虽然这里强调了顺序的特点, 但是由于 live 是个集合, 集合本身无序, 所以这些特点在这里无意义.
+// 但有一点很重要, 由于后面的 version 是由前面的 verison 和 versionedit 合并而来, 而且,
+// 注意, sstable 不可变且 set 集合有互异性特征所以最后保存的都是一个个需要保留下来的文件而不会
+// 重复。
 void VersionSet::AddLiveFiles(std::set<uint64_t>* live) {
   // 逐个 version, 从老到新
   for (Version* v = dummy_versions_.next_;

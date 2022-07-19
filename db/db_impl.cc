@@ -336,7 +336,8 @@ Status DBImpl::Recover(VersionEdit* edit, bool *save_manifest) {
     }
   }
 
-  // 该方法负责从最后一个 MANIFEST 文件解析内容出来与当前 Version 保存的 level 架构合并保存到一个
+  // 该方法负责从最后一个 MANIFEST 文件解析内容出来与当前 Version
+  // 保存的 level 架构合并保存到一个
   // 新建的 Version 中, 然后将这个新的 version 作为当前的 version.
   // 参数是输出型的, 负责保存一个指示当前 MANIFEST 文件是否可以续用.
   s = versions_->Recover(save_manifest);
@@ -414,8 +415,9 @@ Status DBImpl::Recover(VersionEdit* edit, bool *save_manifest) {
   return Status::OK();
 }
 
-// 读取 log 文件并将其转为 memtable. 如果该 log 文件继续使用则将其对应 memtable 赋值到 mem_ 继续使用;
-// 否则将 log 文件对应 memtable 转换为 sorted string table 文件写入磁盘, 同时标记 save_manifest 为 true,
+// 读取 log 文件并将其转为 memtable.
+// 如果该 log 文件继续使用则将其对应 memtable 赋值到 mem_ 继续使用;
+// 否则将 log 文件对应 memtable 转换为 sstable 文件写入磁盘, 同时标记 save_manifest 为 true,
 // 表示 level 架构变动需要记录文件变更到 manifest 文件.
 Status DBImpl::RecoverLogFile(uint64_t log_number, bool last_log,
                               bool* save_manifest, VersionEdit* edit,
@@ -1385,6 +1387,7 @@ Status DBImpl::Get(const ReadOptions& options,
     mutex_.Lock();
   }
 
+  // 每次查询完都要检查下是否有文件查询次数已经达到最大需要进行压实了.
   if (have_stat_update && current->UpdateStats(stats)) {
     MaybeScheduleCompaction();
   }
