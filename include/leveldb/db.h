@@ -24,20 +24,16 @@ struct ReadOptions;
 struct WriteOptions;
 class WriteBatch; // 通过所使用的 Handler 与 MemTable 联系了起来, 后者内部存储结构是一个 SkipList. 
 
-// Abstract handle to particular state of a DB.
-// A Snapshot is an immutable object and can therefore be safely
-// accessed from multiple threads without any external synchronization.
 /**
- * 对应某个 DB 特定的状态.
+ * 对应 db 特定状态的抽象 handle.
  *
- * 快照是不可变的, 因此可以不使用额外的同步实施而被多个线程安全地并发访问.
+ * 快照是不可变的对象, 因此不使用额外的同步实施就可以被多个线程安全地并发访问.
  */
 class LEVELDB_EXPORT Snapshot {
  protected:
   virtual ~Snapshot();
 };
 
-// A range of keys
 /**
  * 定义一个 keys 范围, 左闭右开
  */
@@ -49,21 +45,13 @@ struct LEVELDB_EXPORT Range {
   Range(const Slice& s, const Slice& l) : start(s), limit(l) { }
 };
 
-// A DB is a persistent ordered map from keys to values.
-// A DB is safe for concurrent access from multiple threads without
-// any external synchronization.
 /**
- * 一个 DB 就是一个持久化的有序 map. 
+ * 一个 DB 就是一个持久化的有序 kv map. 
  *
  * 一个 DB 可以被多个线程不采用任何外部同步设施进行安全地并发访问. 
  */
 class LEVELDB_EXPORT DB {
  public:
-  // Open the database with the specified "name".
-  // Stores a pointer to a heap-allocated database in *dbptr and returns
-  // OK on success.
-  // Stores nullptr in *dbptr and returns a non-OK status on error.
-  // Caller should delete *dbptr when it is no longer needed.
   /**
    * 打开一个名为 name 的数据库. 
    *
@@ -123,13 +111,6 @@ class LEVELDB_EXPORT DB {
    */
   virtual Status Write(const WriteOptions& options, WriteBatch* updates) = 0;
 
-  // If the database contains an entry for "key" store the
-  // corresponding value in *value and return OK.
-  //
-  // If there is no entry for "key" leave *value unchanged and return
-  // a status for which Status::IsNotFound() returns true.
-  //
-  // May return some other Status on an error.
   /**
    * 查询键为 key 的数据项, 如果存在则将对应的 value 地址存储到第二个参数中. 
    *
@@ -143,12 +124,6 @@ class LEVELDB_EXPORT DB {
   virtual Status Get(const ReadOptions& options,
                      const Slice& key, std::string* value) = 0;
 
-  // Return a heap-allocated iterator over the contents of the database.
-  // The result of NewIterator() is initially invalid (caller must
-  // call one of the Seek methods on the iterator before using it).
-  //
-  // Caller should delete the iterator when it is no longer needed.
-  // The returned iterator should be deleted before this db is deleted.
   /**
    * 返回基于堆内存的迭代器, 可以用该迭代器遍历整个数据库的内容. 
    * 该函数返回的迭代器初始是无效的(在使用迭代器之前, 调用者必须在其上调用 Seek 方法). 
@@ -159,10 +134,6 @@ class LEVELDB_EXPORT DB {
    */
   virtual Iterator* NewIterator(const ReadOptions& options) = 0;
 
-  // Return a handle to the current DB state.  Iterators created with
-  // this handle will all observe a stable snapshot of the current DB
-  // state.  The caller must call ReleaseSnapshot(result) when the
-  // snapshot is no longer needed.
   /**
    * 返回当前 DB 状态的一个快照. 使用该快照创建的全部迭代器将会都指向一个当前 DB 的一个稳定快照. 
    *
@@ -171,30 +142,12 @@ class LEVELDB_EXPORT DB {
    */
   virtual const Snapshot* GetSnapshot() = 0;
 
-  // Release a previously acquired snapshot.  The caller must not
-  // use "snapshot" after this call.
   /**
    * 释放一个之前获取的快照, 释放后, 调用者不能再使用该快照了. 
    * @param snapshot 指向要释放的快照的指针
    */
   virtual void ReleaseSnapshot(const Snapshot* snapshot) = 0;
 
-  // DB implementations can export properties about their state
-  // via this method.  If "property" is a valid property understood by this
-  // DB implementation, fills "*value" with its current value and returns
-  // true.  Otherwise returns false.
-  //
-  //
-  // Valid property names include:
-  //
-  //  "leveldb.num-files-at-level<N>" - return the number of files at level <N>,
-  //     where <N> is an ASCII representation of a level number (e.g. "0").
-  //  "leveldb.stats" - returns a multi-line string that describes statistics
-  //     about the internal operation of the DB.
-  //  "leveldb.sstables" - returns a multi-line string that describes all
-  //     of the sstables that make up the db contents.
-  //  "leveldb.approximate-memory-usage" - returns the approximate number of
-  //     bytes of memory in use by the DB.
   /**
    * DB 可以通过该方法导出自身状态信息. 如果提供的属性可以被 DB 实现理解, 那么第二个参数将会
    * 存储该属性对应的当前值同时该方法返回 true, 其它情况该方法返回 false. 
@@ -214,14 +167,6 @@ class LEVELDB_EXPORT DB {
    */
   virtual bool GetProperty(const Slice& property, std::string* value) = 0;
 
-  // For each i in [0,n-1], store in "sizes[i]", the approximate
-  // file system space used by keys in "[range[i].start .. range[i].limit)".
-  //
-  // Note that the returned sizes measure file system space usage, so
-  // if the user data compresses by a factor of ten, the returned
-  // sizes will be one-tenth the size of the corresponding user data size.
-  //
-  // The results may not include the sizes of recently written data.
   /**
    * 对于 [0, n-1] 中每个 i, 将位于 [range[i].start .. range[i].limit) 中全部 keys 所占用文件系统空间
    * 近似大小存储到 sizes[i] 中. 
@@ -236,16 +181,6 @@ class LEVELDB_EXPORT DB {
   virtual void GetApproximateSizes(const Range* range, int n,
                                    uint64_t* sizes) = 0;
 
-  // Compact the underlying storage for the key range [*begin,*end].
-  // In particular, deleted and overwritten versions are discarded,
-  // and the data is rearranged to reduce the cost of operations
-  // needed to access the data.  This operation should typically only
-  // be invoked by users who understand the underlying implementation.
-  //
-  // begin==nullptr is treated as a key before all keys in the database.
-  // end==nullptr is treated as a key after all keys in the database.
-  // Therefore the following call will compact the entire database:
-  //    db->CompactRange(nullptr, nullptr);
   /**
    * 将键范围 [*begin,*end] 对应的底层存储压实, 注意范围是左闭右闭. 
    *
@@ -261,11 +196,6 @@ class LEVELDB_EXPORT DB {
   virtual void CompactRange(const Slice* begin, const Slice* end) = 0;
 };
 
-// Destroy the contents of the specified database.
-// Be very careful using this method.
-//
-// Note: For backwards compatibility, if DestroyDB is unable to list the
-// database files, Status::OK() will still be returned masking this failure.
 /**
  * 销毁指定数据库的全部内容, 该方法请慎用. 
  *
@@ -277,10 +207,6 @@ class LEVELDB_EXPORT DB {
 LEVELDB_EXPORT Status DestroyDB(const std::string& name,
                                 const Options& options);
 
-// If a DB cannot be opened, you may attempt to call this method to
-// resurrect as much of the contents of the database as possible.
-// Some data may be lost, so be careful when calling this function
-// on a database that contains important information.
 /**
  * 如果 DB 无法打开, 你可以调用该方法尝试修复尽量多的数据库内容. 
  * 修复操作可能导致部分数据丢失, 所以
