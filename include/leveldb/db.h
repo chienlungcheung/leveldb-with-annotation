@@ -87,10 +87,6 @@ class LEVELDB_EXPORT DB {
                      const Slice& key,
                      const Slice& value) = 0;
 
-  // Remove the database entry (if any) for "key".  Returns OK on
-  // success, and a non-OK status on error.  It is not an error if "key"
-  // did not exist in the database.
-  // Note: consider setting options.sync = true.
   /**
    * 从数据删除指定键为 key 的键值对. 如果 key 不存在不算错. 
    *

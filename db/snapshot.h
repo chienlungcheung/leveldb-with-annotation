@@ -12,10 +12,8 @@ namespace leveldb {
 
 class SnapshotList;
 
-// Snapshots are kept in a doubly-linked list in the DB.
-// Each SnapshotImpl corresponds to a particular sequence number.
-//
-// Snapshots 保存在 DB 的一个双向循环链表中, 每个 SnapshotImpl 对应一个具体的序列号. 
+// Snapshots 保存在 DB 的一个双向循环链表中, 
+// 每个 SnapshotImpl 对应一个具体的序列号. 
 class SnapshotImpl : public Snapshot {
  public:
   // 构造函数允许一个序列号隐式地转换为一个 SnapshotImpl 对象
@@ -27,8 +25,7 @@ class SnapshotImpl : public Snapshot {
  private:
   friend class SnapshotList;
 
-  // SnapshotImpl is kept in a doubly-linked circular list. The SnapshotList
-  // implementation operates on the next/previous fields direcly.
+  // 下面两个指针用于构造双向循环链表
   SnapshotImpl* prev_;
   SnapshotImpl* next_;
 
@@ -67,14 +64,6 @@ class SnapshotList {
     return snapshot;
   }
 
-  // Removes a SnapshotImpl from this list.
-  //
-  // The snapshot must have been created by calling New() on this list.
-  //
-  // The snapshot pointer should not be const, because its memory is
-  // deallocated. However, that would force us to change DB::ReleaseSnapshot(),
-  // which is in the API, and currently takes a const Snapshot.
-  //
   // 从双向链表上移除指定的快照. 
   //
   // 要移除的快照必须是通过 New() 方法创建的. 
