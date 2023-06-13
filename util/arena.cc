@@ -74,7 +74,7 @@ char* Arena::AllocateAligned(size_t bytes) {
     alloc_bytes_remaining_ -= needed;
   } else { 
     // 否则从堆中申请新的内存块, 注意重新分配
-    // 内存块时 malloc 会保证对齐, 无序再如上做手工对齐.
+    // 内存块时 malloc 会保证对齐, 无需再如上做手工对齐.
     result = AllocateFallback(bytes);
   }
   assert((reinterpret_cast<uintptr_t>(result) & (align-1)) == 0);
