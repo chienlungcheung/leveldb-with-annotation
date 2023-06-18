@@ -132,7 +132,7 @@ Status Table::Open(const Options& options,
 // 仅有 filter block 一种). 
 // 这就是我们要的元数据, 解析出来的元数据会被放到 Table::rep_ 中. 
 void Table::ReadMeta(const Footer& footer) {
-  // 如果压根就没配置过滤策略, 那么无序解析元数据
+  // 如果压根就没配置过滤策略, 那么无需解析元数据
   if (rep_->options.filter_policy == nullptr) {
     return;
   }
