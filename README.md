@@ -1,7 +1,7 @@
 
 # 写在前面
 
-本项目是出于兴趣为 leveldb 写的传, 目标注释全部代码(注释就在该项目中), 同时输出一个博客系列(首篇博客点[这里](https://chienlungcheung.github.io/leveldb-annotations-0-usage-and-examples/), 注释和博客是同步的, 但是博客带着思路更加系统一些), 持续更新中. 代码里的注释或者代码都是根据我的理解进行的, 可能有错漏, 欢迎大家指正. 向 Sanjay Ghemawat 和 Jeff Dean 致敬(后者是我的技术偶像).
+本项目是出于兴趣为 leveldb 写的传, 目标注释全部代码(注释就在该项目中), 同时输出一个博客系列(首篇博客点[这里](http://chienlungcheung.github.io/leveldb-annotations-0-usage-and-examples/), 注释和博客是同步的, 但是博客带着思路更加系统一些), 持续更新中. 代码里的注释或者代码都是根据我的理解进行的, 可能有错漏, 欢迎大家指正. 向 Sanjay Ghemawat 和 Jeff Dean 致敬(后者是我的技术偶像).
 
 # 开始
 **LevelDB 是一个快速的键值存储程序库, 提供了字符串形式的 keys 到字符串形式的 values 的有序映射.**
